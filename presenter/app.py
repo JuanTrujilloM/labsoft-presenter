@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import QObject, QSettings, QTimer
-from PyQt6.QtGui import QAction, QIcon, QKeySequence
+from PyQt6.QtGui import QAction, QCursor, QIcon, QKeySequence
 from PyQt6.QtWidgets import QApplication, QMenu, QMenuBar, QSystemTrayIcon
 
 from presenter.capture import screen_recording_allowed
@@ -11,6 +11,7 @@ from presenter.cocoa import (
     accessibility_trusted,
     request_accessibility,
     request_screen_recording,
+    set_system_cursor_hidden,
     window_number,
 )
 from presenter.dock import Dock, Guide
@@ -81,6 +82,7 @@ class Presenter(QObject):
         if self._capturing:
             return
         if name == "quit":
+            set_system_cursor_hidden(False)
             QApplication.quit()
             return
         if name == "hide":
@@ -145,6 +147,7 @@ class Presenter(QObject):
             return
         self._last = state
         self.dock.apply(state)
+        self._sync_laser_cursor()
         interval = 16 if state.mode != "idle" else 40
         if self._tick.interval() != interval:
             self._tick.setInterval(interval)
@@ -235,6 +238,7 @@ class Presenter(QObject):
             return
         if self.overlay.mode != "idle" or self.overlay.editor_open():
             self.overlay.pointer_tick(steps, alt, left, ctrl)
+        self._sync_laser_cursor()
         if self.overlay.mode == "lens":
             self._lens_tick += 1
             if self._lens_tick % 3 == 0:
@@ -242,6 +246,16 @@ class Presenter(QObject):
                     self.lens.show()
                 self.lens.refresh(self.overlay.lens_power, self._below_id())
                 self._raise_chrome()
+
+    def _sync_laser_cursor(self) -> None:
+        if self.overlay.mode != "laser":
+            set_system_cursor_hidden(False)
+            return
+        pos = QCursor.pos()
+        over_chrome = self.dock.frameGeometry().contains(pos)
+        if self.guide.isVisible() and self.guide.frameGeometry().contains(pos):
+            over_chrome = True
+        set_system_cursor_hidden(not over_chrome)
 
     def _sync_lens(self) -> None:
         if self.overlay.mode == "lens":
@@ -317,3 +331,4 @@ class Presenter(QObject):
         app_menu.addAction(quit_action)
         self._menu = menu
         QApplication.instance().aboutToQuit.connect(self.hotkeys.stop)
+        QApplication.instance().aboutToQuit.connect(lambda: set_system_cursor_hidden(False))

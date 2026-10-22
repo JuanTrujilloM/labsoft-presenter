@@ -106,6 +106,26 @@ def request_accessibility() -> None:
         pass
 
 
+_CURSOR_HIDDEN = False
+
+
+def set_system_cursor_hidden(hidden: bool) -> None:
+    """Hide the arrow so the laser glow can be the pointer."""
+    global _CURSOR_HIDDEN
+    if sys.platform != "darwin" or hidden == _CURSOR_HIDDEN:
+        return
+    try:
+        from AppKit import NSCursor
+
+        if hidden:
+            NSCursor.hide()
+        else:
+            NSCursor.unhide()
+        _CURSOR_HIDDEN = hidden
+    except Exception:
+        return
+
+
 def request_screen_recording() -> None:
     if sys.platform != "darwin":
         return

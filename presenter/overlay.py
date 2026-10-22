@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import time
-
 from PyQt6.QtCore import (
     QEasingCurve,
     QPoint,
@@ -33,7 +31,7 @@ from presenter.theme import ACCENT, PALETTE
 _DRAW_SHAPES = ("pen", "marker", "line", "arrow", "rect", "ellipse", "eraser")
 _HINTS = {
     "idle": "Resalta, amplía y escribe sobre la diapositiva",
-    "laser": "Una luz sigue al puntero",
+    "laser": "La luz es el puntero",
     "spotlight": "Pulsa Marco y arrastra alrededor de un elemento  ·  ⌥ y arrastrar también enmarca",
     "zoom": "Muévete para mirar  ·  desplázate para ampliar  ·  elige un lápiz para escribir",
     "lens": "Una lupa sigue al puntero  ·  + y − cambian la potencia",
@@ -114,7 +112,6 @@ class Overlay(FloatingWindow):
         self._frame_origin: QPointF | None = None
         self._option_dragging = False
         self._erasing = False
-        self._laser: list[tuple[QPointF, float]] = []
         self._last_cursor = QPoint()
         self._hover = QPointF()
         self._editor_anchor: QPointF | None = None
@@ -172,7 +169,6 @@ class Overlay(FloatingWindow):
         self._live_points = []
         self._live_frame = None
         self._frame_origin = None
-        self._laser.clear()
         if mode == "draw":
             self.inking = True
             if self.shape not in _DRAW_SHAPES:
@@ -200,7 +196,6 @@ class Overlay(FloatingWindow):
         self._live_points = []
         self._live_frame = None
         self._frame_origin = None
-        self._laser.clear()
         self._commit_editor()
         self._present()
 
@@ -539,7 +534,9 @@ class Overlay(FloatingWindow):
         self._update_cursor()
 
     def _update_cursor(self) -> None:
-        if self.mode == "zoom" and (not self.inking or self.space_held):
+        if self.mode == "laser":
+            self.setCursor(self._blank)
+        elif self.mode == "zoom" and (not self.inking or self.space_held):
             self.setCursor(self._blank)
         elif self.mode == "text" or (self.inking and self.shape == "text"):
             self.setCursor(Qt.CursorShape.IBeamCursor)
@@ -803,23 +800,13 @@ class Overlay(FloatingWindow):
         painter.drawEllipse(center, self.radius * 0.86, self.radius * 0.86)
 
     def _paint_laser(self, painter: QPainter) -> None:
-        now = time.monotonic()
-        for point, stamp in self._laser:
-            age = (now - stamp) / 0.42
-            if age >= 1:
-                continue
-            alpha = int(150 * (1 - age))
-            radius = 6 + 12 * age
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(231, 177, 90, alpha))
-            painter.drawEllipse(self.global_to_widget(point), radius, radius)
         cursor = self.global_to_widget(QPointF(QCursor.pos()))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(231, 177, 90, 80))
+        painter.setBrush(QColor(255, 32, 32, 90))
         painter.drawEllipse(cursor, 18, 18)
-        painter.setBrush(QColor(255, 236, 200, 230))
+        painter.setBrush(QColor(255, 48, 48, 235))
         painter.drawEllipse(cursor, 8, 8)
-        painter.setBrush(QColor(255, 255, 255))
+        painter.setBrush(QColor(255, 170, 170))
         painter.drawEllipse(cursor, 3.2, 3.2)
 
     def _paint_crosshair(self, painter: QPainter) -> None:
@@ -840,15 +827,9 @@ class Overlay(FloatingWindow):
         painter.setBrush(QColor(255, 255, 255, 16))
         painter.drawEllipse(self._hover, radius, radius)
 
-    def _track_laser(self, pos: QPoint, moved: bool) -> None:
-        now = time.monotonic()
+    def _track_laser(self, _pos: QPoint, moved: bool) -> None:
         if moved:
-            self._laser.append((QPointF(pos), now))
-            if len(self._laser) > 42:
-                self._laser = self._laser[-42:]
-        cutoff = now - 0.42
-        self._laser = [(point, stamp) for point, stamp in self._laser if stamp >= cutoff]
-        self.update()
+            self.update()
 
     def _track_option_frame(self, pos: QPoint, alt: bool, left: bool) -> None:
         if self.captures_mouse():

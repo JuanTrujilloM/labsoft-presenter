@@ -38,10 +38,11 @@ def _draw(painter: QPainter, name: str, color: QColor) -> None:
         painter.drawEllipse(QPointF(0, 0), 3.15, 3.15)
         return
     if name == "laser":
+        red = QColor(255, 48, 48)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(color)
+        painter.setBrush(red)
         painter.drawEllipse(QPointF(0, 0), 2.35, 2.35)
-        painter.setPen(_pen(color, 1.5))
+        painter.setPen(_pen(red, 1.5))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         for angle in range(0, 360, 45):
             painter.save()

@@ -97,7 +97,7 @@ class Guide(_Glass):
 
         rows = (
             ("Resaltar", "⌃⌥H", "Oscurece la sala y enmarca un elemento"),
-            ("Láser", "⌃⌥L", "Una luz que te sigue"),
+            ("Láser", "⌃⌥L", "La luz es el puntero"),
             ("Zoom", "⌃⌥Z", "Congela la pantalla y la amplía"),
             ("Lupa", "⌃⌥M", "Una lupa sobre el puntero"),
             ("Dibujar", "⌃⌥D", "Pluma, marcador, flechas y formas"),

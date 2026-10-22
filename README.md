@@ -1,6 +1,6 @@
 # Presenter
 
-Una capa ligera para presentar en macOS. Resalta un elemento, amplía la pantalla o escribe sobre una diapositiva sin salir de ella.
+Una capa ligera para presentar en macOS. Resalta un elemento, amplía la pantalla, escribe sobre una diapositiva o elige un estudiante al azar.
 
 ## Ejecutar
 
@@ -51,3 +51,13 @@ Si aparece un aviso, permítelo, cierra Presenter y ábrelo de nuevo.
 Al resaltar, pulsa **Marco** y arrastra alrededor de un elemento. Mantén ⌥ y arrastra para enmarcar sin salir de la diapositiva. Desplázate, o usa + y −, para cambiar el foco de luz o el zoom. Con varias pantallas, Zoom pide primero cuál ampliar y sigue al puntero solo en esa pantalla. Con el zoom activo, un doble clic pasa al lápiz y otro doble clic vuelve a mover.
 
 La tinta y los marcos permanecen al salir de una herramienta. **Borrar** los quita. **Listo** o Esc da un paso atrás.
+
+## Elegir al azar
+
+El dado, en la barra, abre la fila del listado.
+
+**Cargar lista** lee un archivo de texto con un nombre por renglón. Las líneas vacías se ignoran.
+
+**Elegir** hace pasar varios nombres, frena y deja el elegido en dorado. No repite un nombre hasta que hayan salido todos.
+
+La papelera junto al nombre lo quita de la lista. Esa persona no vuelve a salir en los siguientes sorteos.

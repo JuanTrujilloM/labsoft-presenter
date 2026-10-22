@@ -125,7 +125,7 @@ class Guide(_Glass):
         title = QLabel("Presenter")
         title.setFont(ui_font(20, QFont.Weight.DemiBold))
         title.setStyleSheet("color: #F7F4EC; background: transparent;")
-        subtitle = QLabel("Resalta un elemento, amplíalo o escribe sobre la diapositiva.")
+        subtitle = QLabel("Resalta un elemento, amplíalo, escribe o elige un estudiante al azar.")
         subtitle.setFont(ui_font(12))
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet("color: rgba(247,244,236,0.62); background: transparent;")
@@ -139,6 +139,7 @@ class Guide(_Glass):
             ("Zoom", "⌃⌥Z", "Elige la pantalla y amplía solo ahí"),
             ("Dibujar", "⌃⌥D", "Pluma, marcador, flechas y formas"),
             ("Escribir", "⌃⌥T", "Escribe sobre la diapositiva"),
+            ("Azar", "dado", "Carga nombres, elige uno y quita quien no está"),
             ("Herramientas", "⌃⌥P", "Muestra u oculta esta barra"),
             ("Volver", "Esc", "Un paso atrás. La tinta se queda"),
             ("Deshacer", "⌘Z", "Quita la última marca"),

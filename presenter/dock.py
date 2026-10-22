@@ -147,8 +147,9 @@ class Guide(_Glass):
         root.addSpacing(4)
 
         rows = (
-            ("spotlight", "Resaltar", "⌃⌥H", "Enmarca un elemento"),
+            ("mark", "Mover", "—", "Arrastra la ventana"),
             ("laser", "Láser", "⌃⌥L", "La luz es el puntero"),
+            ("spotlight", "Resaltar", "⌃⌥H", "Enmarca un elemento"),
             ("zoom", "Zoom", "⌃⌥Z", "Amplía la pantalla"),
             ("draw", "Dibujar", "⌃⌥D", "Trazo y formas"),
             ("text", "Escribir", "⌃⌥T", "Texto en la diapositiva"),

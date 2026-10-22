@@ -105,6 +105,17 @@ def _draw(painter: QPainter, name: str, color: QColor) -> None:
         painter.drawArc(QRectF(-5.5, -5.5, 11.0, 11.0), 40 * 16, 250 * 16)
         _arrow(painter, QPointF(-5.2, -1.5), QPointF(-7.4, 2.4), color, 1.6)
         return
+    if name == "trash":
+        painter.drawLine(QPointF(-5.4, -3.4), QPointF(5.4, -3.4))
+        painter.drawLine(QPointF(-1.7, -5.6), QPointF(1.7, -5.6))
+        painter.drawLine(QPointF(-1.7, -5.6), QPointF(-1.7, -3.4))
+        painter.drawLine(QPointF(1.7, -5.6), QPointF(1.7, -3.4))
+        painter.drawLine(QPointF(-4.4, -3.4), QPointF(-3.3, 5.6))
+        painter.drawLine(QPointF(4.4, -3.4), QPointF(3.3, 5.6))
+        painter.drawLine(QPointF(-3.3, 5.6), QPointF(3.3, 5.6))
+        painter.drawLine(QPointF(-1.15, -1.0), QPointF(-1.15, 3.5))
+        painter.drawLine(QPointF(1.15, -1.0), QPointF(1.15, 3.5))
+        return
     if name == "clear":
         painter.drawLine(QPointF(-4.2, -4.2), QPointF(4.2, 4.2))
         painter.drawLine(QPointF(-4.2, 4.2), QPointF(4.2, -4.2))
@@ -119,6 +130,13 @@ def _draw(painter: QPainter, name: str, color: QColor) -> None:
     if name == "hide":
         painter.drawLine(QPointF(-5.5, -2.0), QPointF(0, 3.4))
         painter.drawLine(QPointF(0, 3.4), QPointF(5.5, -2.0))
+        return
+    if name == "random":
+        painter.drawRoundedRect(QRectF(-6.4, -6.4, 12.8, 12.8), 2.6, 2.6)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color)
+        for point in ((-3.1, -3.1), (3.1, -3.1), (0, 0), (-3.1, 3.1), (3.1, 3.1)):
+            painter.drawEllipse(QPointF(*point), 1.05, 1.05)
         return
     if name == "help":
         painter.drawEllipse(QPointF(0, 0), 7.0, 7.0)

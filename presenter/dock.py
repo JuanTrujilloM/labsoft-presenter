@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QPoint, QRectF, Qt, pyqtSignal
+import random
+from pathlib import Path
+
+from PyQt6.QtCore import QPoint, QRectF, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QCursor, QFont, QGuiApplication, QPainter, QPen
-from PyQt6.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from presenter.capture import screen_recording_allowed
 from presenter.cocoa import (
@@ -12,6 +15,7 @@ from presenter.cocoa import (
     accessibility_trusted,
     request_accessibility,
     request_screen_recording,
+    set_native_level,
 )
 from presenter.icons import paint_icon
 from presenter.model import UiState
@@ -19,6 +23,31 @@ from presenter.theme import ACCENT, DOCK_PAD, DOCK_RADIUS, DOCK_SHADOW, GLASS, I
 from presenter.widgets import ColorDot, Hairline, IconButton, TextButton, ThinSlider
 
 _SHAPES = ("pen", "marker", "line", "arrow", "rect", "ellipse")
+
+
+def names_from_text(text: str) -> list[str]:
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+
+def spin_sequence(names: list[str], winner: str, length: int = 15) -> list[str]:
+    """Teaser names, then the chosen one. The winner stays off the reel until the end."""
+    teasers = 4 if len(names) < 2 else max(length - 1, 1)
+    frames: list[str] = []
+    previous = None
+    for _ in range(teasers):
+        options = [name for name in names if name != previous and name != winner]
+        if not options:
+            options = [name for name in names if name != previous] or list(names)
+        previous = random.choice(options)
+        frames.append(previous)
+    frames.append(winner)
+    return frames
+
+
+def _spin_delay(index: int, total: int) -> int:
+    span = max(total - 1, 1)
+    progress = index / span
+    return int(32 + (progress * progress) * 170)
 
 
 def _screen_label(screen) -> str:
@@ -96,7 +125,7 @@ class Guide(_Glass):
         title = QLabel("Presenter")
         title.setFont(ui_font(20, QFont.Weight.DemiBold))
         title.setStyleSheet("color: #F7F4EC; background: transparent;")
-        subtitle = QLabel("Resalta un elemento, amplíalo o escribe sobre la diapositiva.")
+        subtitle = QLabel("Resalta un elemento, amplíalo, escribe o elige un estudiante al azar.")
         subtitle.setFont(ui_font(12))
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet("color: rgba(247,244,236,0.62); background: transparent;")
@@ -110,6 +139,7 @@ class Guide(_Glass):
             ("Zoom", "⌃⌥Z", "Elige la pantalla y amplía solo ahí"),
             ("Dibujar", "⌃⌥D", "Pluma, marcador, flechas y formas"),
             ("Escribir", "⌃⌥T", "Escribe sobre la diapositiva"),
+            ("Azar", "dado", "Carga nombres, elige uno y quita quien no está"),
             ("Herramientas", "⌃⌥P", "Muestra u oculta esta barra"),
             ("Volver", "Esc", "Un paso atrás. La tinta se queda"),
             ("Deshacer", "⌘Z", "Quita la última marca"),
@@ -216,6 +246,18 @@ class Dock(_Glass):
         self._collapsed = False
         self._ready = False
         self._zoom_screens: tuple = ()
+        self._roster_open = False
+        self._names: list[str] = []
+        self._pool: list[str] = []
+        self._picked = ""
+        self._roster_error = ""
+        self._flags_before_dialog = None
+        self._spinning = False
+        self._spin_frames: list[str] = []
+        self._spin_index = 0
+        self._spin_timer = QTimer(self)
+        self._spin_timer.setSingleShot(True)
+        self._spin_timer.timeout.connect(self._spin_tick)
 
         self.mark = Mark()
         self.laser = IconButton("laser", checkable=True)
@@ -223,6 +265,7 @@ class Dock(_Glass):
         self.zoom = IconButton("zoom", checkable=True)
         self.draw = IconButton("draw", checkable=True)
         self.text = IconButton("text", checkable=True)
+        self.random_btn = IconButton("random", checkable=True)
         self.help = IconButton("help")
         self.hide_btn = IconButton("hide")
         self.quit_btn = TextButton("Salir")
@@ -292,6 +335,8 @@ class Dock(_Glass):
         tools.addWidget(self.draw)
         tools.addWidget(self.text)
         tools.addSpacing(6)
+        tools.addWidget(self.random_btn)
+        tools.addSpacing(6)
         tools.addWidget(self.help)
         tools.addWidget(self.hide_btn)
         tools.addSpacing(6)
@@ -329,11 +374,52 @@ class Dock(_Glass):
         context.addWidget(self.done)
         context.addStretch(1)
 
+        self.roster = _transparent(QWidget())
+        roster_root = QVBoxLayout(self.roster)
+        roster_root.setContentsMargins(0, 0, 0, 0)
+        roster_root.setSpacing(4)
+        roster_row = QHBoxLayout()
+        roster_row.setContentsMargins(0, 0, 0, 0)
+        roster_row.setSpacing(6)
+        self.roster_load = TextButton("Cargar lista")
+        self.roster_pick = TextButton("Elegir", gold=True)
+        self.roster_status = QLabel("")
+        self.roster_status.setFont(ui_font(12))
+        self.roster_status.setStyleSheet("color: rgba(247,244,236,0.62); background: transparent;")
+        roster_row.addStretch(1)
+        roster_row.addWidget(self.roster_load)
+        roster_row.addWidget(self.roster_pick)
+        roster_row.addWidget(self.roster_status)
+        roster_row.addStretch(1)
+        self.roster_name = QLabel("")
+        self.roster_name.setFont(ui_font(22, QFont.Weight.DemiBold))
+        self.roster_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.roster_name.setWordWrap(True)
+        self.roster_name.setMaximumWidth(480)
+        self.roster_name.setMinimumWidth(320)
+        self.roster_name.setMinimumHeight(52)
+        self.roster_name.setStyleSheet("color: #E7B15A; background: transparent;")
+        roster_root.addLayout(roster_row)
+        name_row = QHBoxLayout()
+        name_row.setContentsMargins(0, 0, 0, 0)
+        name_row.setSpacing(8)
+        self.roster_remove = IconButton("trash")
+        name_row.addStretch(1)
+        name_row.addWidget(self.roster_name)
+        name_row.addWidget(self.roster_remove)
+        name_row.addStretch(1)
+        roster_root.addLayout(name_row)
+        self.roster_pick.hide()
+        self.roster_name.hide()
+        self.roster_remove.hide()
+        self.roster.hide()
+
         root = QVBoxLayout(self)
         left, top, right, bottom = DOCK_SHADOW
         root.setContentsMargins(left + DOCK_PAD, top + DOCK_PAD, right + DOCK_PAD, bottom + DOCK_PAD)
         root.setSpacing(6)
         root.addWidget(self.tools)
+        root.addWidget(self.roster)
         root.addWidget(self.context)
         root.addWidget(self.hint)
         root.addWidget(self.pill)
@@ -348,6 +434,10 @@ class Dock(_Glass):
         self.zoom.clicked.connect(lambda _=False: self.action.emit("zoom"))
         self.draw.clicked.connect(lambda _=False: self.action.emit("draw"))
         self.text.clicked.connect(lambda _=False: self.action.emit("text"))
+        self.random_btn.clicked.connect(self._toggle_roster)
+        self.roster_load.clicked.connect(self._load_roster)
+        self.roster_pick.clicked.connect(self._pick_student)
+        self.roster_remove.clicked.connect(self._remove_picked)
         self.help.clicked.connect(lambda _=False: self.action.emit("help"))
         self.hide_btn.clicked.connect(lambda _=False: self.action.emit("hide"))
         self.quit_btn.clicked.connect(lambda _=False: self.action.emit("quit"))
@@ -477,11 +567,150 @@ class Dock(_Glass):
         self.tools.setVisible(not self._collapsed)
         self.hint.setVisible(not self._collapsed)
         self.context.setVisible(not self._collapsed and (mode != "idle" or state.picking_zoom))
+        self._sync_roster()
         self.pill.setVisible(self._collapsed)
         self.adjustSize()
         self.update()
         if anchor is not None and self.size() != before:
             self._move_to_anchor(anchor)
+
+    def _toggle_roster(self, _checked: bool = False) -> None:
+        self._roster_open = not self._roster_open
+        self._relayout()
+
+    def load_names(self, names: list[str]) -> None:
+        self._cancel_spin()
+        self._names = [name.strip() for name in names if name.strip()]
+        self._pool = list(self._names)
+        self._picked = ""
+        self._roster_error = "" if self._names else "Ese archivo no tiene nombres"
+        self._roster_open = True
+        self._relayout()
+
+    def _load_roster(self) -> None:
+        self._lower_for_dialog()
+        path, _selected = QFileDialog.getOpenFileName(
+            self,
+            "Cargar listado",
+            "",
+            "Texto (*.txt);;Todos los archivos (*)",
+        )
+        self._restore_after_dialog()
+        if not path:
+            return
+        try:
+            raw = Path(path).read_bytes()
+            try:
+                text = raw.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                text = raw.decode("latin-1")
+        except OSError:
+            self._roster_error = "No se pudo leer el archivo"
+            self._relayout()
+            return
+        self.load_names(names_from_text(text))
+
+    def _pick_student(self) -> None:
+        if not self._names or self._spinning:
+            return
+        if not self._pool:
+            self._pool = list(self._names)
+        winner = self._pool.pop(random.randrange(len(self._pool)))
+        self._picked = winner
+        self._spin_frames = spin_sequence(self._names, winner)
+        self._spin_index = 0
+        self._spinning = True
+        self._present_spin(settle=False)
+        self._spin_timer.start(_spin_delay(0, len(self._spin_frames)))
+
+    def _spin_tick(self) -> None:
+        if not self._spinning:
+            return
+        self._spin_index += 1
+        if self._spin_index >= len(self._spin_frames) - 1:
+            self._spin_index = len(self._spin_frames) - 1
+            self._spinning = False
+            self._present_spin(settle=True)
+            return
+        self._present_spin(settle=False)
+        self._spin_timer.start(_spin_delay(self._spin_index, len(self._spin_frames)))
+
+    def _present_spin(self, *, settle: bool) -> None:
+        was_hidden = not self.roster_name.isVisible()
+        self._sync_roster()
+        if was_hidden or settle:
+            self._relayout()
+
+    def _remove_picked(self) -> None:
+        if self._spinning or not self._picked:
+            return
+        name = self._picked
+        if name in self._names:
+            self._names.remove(name)
+        if name in self._pool:
+            self._pool.remove(name)
+        self._picked = ""
+        if not self._names:
+            self._pool = []
+            self._roster_error = "No quedan nombres"
+        self._relayout()
+
+    def _cancel_spin(self) -> None:
+        self._spin_timer.stop()
+        self._spinning = False
+        self._spin_frames = []
+        self._spin_index = 0
+
+    def _sync_roster(self) -> None:
+        self.roster.setVisible(self._roster_open and not self._collapsed)
+        self._set_checked(self.random_btn, self._roster_open)
+        self.roster_pick.setVisible(bool(self._names))
+        self.roster_pick.setEnabled(bool(self._names) and not self._spinning)
+        if self._names:
+            count = len(self._names)
+            self.roster_status.setText("1 nombre" if count == 1 else f"{count} nombres")
+        else:
+            self.roster_status.setText(self._roster_error)
+        self.roster_status.setVisible(bool(self.roster_status.text()))
+        shown = ""
+        settled = False
+        if self._spinning and self._spin_frames:
+            shown = self._spin_frames[min(self._spin_index, len(self._spin_frames) - 1)]
+        elif self._picked:
+            shown = self._picked
+            settled = True
+        self.roster_name.setVisible(bool(shown))
+        self.roster_remove.setVisible(settled)
+        if shown:
+            self.roster_name.setText(shown)
+            color = "#E7B15A" if settled else "rgba(247,244,236,0.78)"
+            self.roster_name.setStyleSheet(f"color: {color}; background: transparent;")
+
+    def _relayout(self) -> None:
+        anchor = None
+        if self._ready:
+            geo = self.frameGeometry()
+            anchor = QPoint(geo.center().x(), geo.bottom())
+        before = self.size()
+        self._sync_roster()
+        self.adjustSize()
+        self.update()
+        if anchor is not None and self.size() != before:
+            self._move_to_anchor(anchor)
+
+    def _lower_for_dialog(self) -> None:
+        self._flags_before_dialog = self.windowFlags()
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, False)
+        self.show()
+        set_native_level(self, 0)
+
+    def _restore_after_dialog(self) -> None:
+        if self._flags_before_dialog is not None:
+            self.setWindowFlags(self._flags_before_dialog)
+            self._flags_before_dialog = None
+        self.show()
+        self.apply_native()
+        self.raise_()
 
     def _refresh_zoom_screens(self) -> None:
         screens = QGuiApplication.screens()

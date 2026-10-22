@@ -34,7 +34,7 @@ _HINTS = {
     "idle": "Resalta, amplía y escribe sobre la diapositiva",
     "laser": "La luz es el puntero",
     "spotlight": "Pulsa Marco y arrastra alrededor de un elemento  ·  ⌥ y arrastrar también enmarca",
-    "zoom": "Muévete para mirar  ·  doble clic pasa al lápiz  ·  desplázate para ampliar",
+    "zoom": "Muévete en esta pantalla para mirar  ·  doble clic pasa al lápiz  ·  desplázate para ampliar",
     "lens": "Una lupa sigue al puntero  ·  + y − cambian la potencia",
     "draw": "La tinta permanece al salir  ·  ⌘Z deshace",
     "text": "Haz clic donde debe ir el texto y escribe  ·  Enter lo coloca",
@@ -162,6 +162,7 @@ class Overlay(FloatingWindow):
         super().__init__()
         self.doc = document
         self.mode = "idle"
+        self.picking_zoom = False
         self.shape = "pen"
         self.inking = False
         self.framing = False
@@ -215,6 +216,7 @@ class Overlay(FloatingWindow):
             can_undo=self.doc.can_undo(),
             hint=self._hint(),
             message=self._message,
+            picking_zoom=self.picking_zoom,
         )
 
     def editor_open(self) -> bool:
@@ -236,6 +238,7 @@ class Overlay(FloatingWindow):
         self.changed.emit()
 
     def set_mode(self, mode: str) -> None:
+        self.picking_zoom = False
         self._stop_anim()
         self.shot = None
         self.mode = mode
@@ -258,6 +261,7 @@ class Overlay(FloatingWindow):
         self._present()
 
     def exit_mode(self) -> None:
+        self.picking_zoom = False
         self._stop_anim()
         self.shot = None
         self.mode = "idle"
@@ -274,18 +278,25 @@ class Overlay(FloatingWindow):
         self._commit_editor()
         self._present()
 
-    def capture_and_zoom(self) -> bool:
-        screen = QGuiApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
+    def capture_and_zoom(self, screen=None) -> bool:
+        if screen is None:
+            screen = QGuiApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
         if screen is None:
             return False
         shot = capture_screen(screen)
         if shot.isNull() or shot.width() < 2:
             return False
+        self.picking_zoom = False
         self._stop_anim()
         self.place(screen)
         self.shot = shot
-        local = QCursor.pos() - screen.geometry().topLeft()
-        self.view_center = QPointF(float(local.x()), float(local.y()))
+        geo = screen.geometry()
+        cursor = QCursor.pos()
+        if geo.contains(cursor):
+            local = cursor - geo.topLeft()
+            self.view_center = QPointF(float(local.x()), float(local.y()))
+        else:
+            self.view_center = QPointF(geo.width() / 2, geo.height() / 2)
         self.zoom = 1.0
         self.mode = "zoom"
         self.inking = False
@@ -327,6 +338,10 @@ class Overlay(FloatingWindow):
             self._apply_interaction()
             self.changed.emit()
             self.update()
+            return
+        if self.picking_zoom:
+            self.picking_zoom = False
+            self.changed.emit()
             return
         if self.mode != "idle":
             self.exit_mode()
@@ -398,6 +413,10 @@ class Overlay(FloatingWindow):
         moved = pos != self._last_cursor
         self._last_cursor = pos
         self._follow_screen(pos)
+        if self.mode == "zoom":
+            buttons = Qt.MouseButton.LeftButton if left else Qt.MouseButton.NoButton
+            self._track_zoom_pointer(buttons)
+            return
         if self.mode == "laser":
             self._track_laser(pos, moved)
             return
@@ -415,6 +434,10 @@ class Overlay(FloatingWindow):
     def place(self, screen) -> None:
         self._screen = screen
         geo = screen.geometry()
+        self.winId()
+        handle = self.windowHandle()
+        if handle is not None and handle.screen() is not screen:
+            handle.setScreen(screen)
         self.setGeometry(geo)
         self.origin = QPointF(geo.topLeft())
 
@@ -484,10 +507,8 @@ class Overlay(FloatingWindow):
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
         pos = event.position()
         self._hover = pos
-        if self._should_pan(event.buttons()):
-            self.view_center = QPointF(pos.x(), pos.y())
-            self._reposition_editor()
-            self.update()
+        if self.mode == "zoom" and self._should_pan(event.buttons()):
+            self._track_zoom_pointer(event.buttons())
             event.accept()
             return
         global_pos = self.widget_to_global(pos)
@@ -589,6 +610,8 @@ class Overlay(FloatingWindow):
         super().keyReleaseEvent(event)
 
     def _hint(self) -> str:
+        if self.picking_zoom:
+            return "Elige la pantalla donde quieres ampliar"
         if self.mode == "spotlight" and self.framing:
             return "Arrastra alrededor del elemento que quieres mostrar"
         if self.mode == "zoom" and self.inking and self.shape == "text":
@@ -668,6 +691,22 @@ class Overlay(FloatingWindow):
         if self.mode == "draw":
             return self.shape in _DRAW_SHAPES
         return self.mode == "zoom" and self.inking and self.shape in _DRAW_SHAPES
+
+    def _track_zoom_pointer(self, buttons) -> None:
+        if not self._should_pan(buttons) or self._screen is None or self.shot is None:
+            return
+        cursor = QCursor.pos()
+        geo = self._screen.geometry()
+        if not geo.contains(cursor):
+            return
+        local = cursor - geo.topLeft()
+        center = QPointF(float(local.x()), float(local.y()))
+        if abs(center.x() - self.view_center.x()) < 0.5 and abs(center.y() - self.view_center.y()) < 0.5:
+            return
+        self.view_center = center
+        self._hover = center
+        self._reposition_editor()
+        self.update()
 
     def _should_pan(self, buttons) -> bool:
         if self.mode != "zoom":

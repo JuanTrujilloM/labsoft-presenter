@@ -21,6 +21,16 @@ from presenter.widgets import ColorDot, Hairline, IconButton, TextButton, ThinSl
 _SHAPES = ("pen", "marker", "line", "arrow", "rect", "ellipse")
 
 
+def _screen_label(screen) -> str:
+    name = (screen.name() or "").strip()
+    folded = name.lower()
+    if "built-in" in folded or "integrad" in folded:
+        return "Integrada"
+    if not name:
+        return "Pantalla"
+    return name if len(name) <= 18 else name[:17] + "…"
+
+
 def _transparent(widget: QWidget) -> QWidget:
     widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
     widget.setAutoFillBackground(False)
@@ -97,7 +107,7 @@ class Guide(_Glass):
         rows = (
             ("Resaltar", "⌃⌥H", "Oscurece la sala y enmarca un elemento"),
             ("Láser", "⌃⌥L", "La luz es el puntero"),
-            ("Zoom", "⌃⌥Z", "Congela la pantalla y la amplía"),
+            ("Zoom", "⌃⌥Z", "Elige la pantalla y amplía solo ahí"),
             ("Dibujar", "⌃⌥D", "Pluma, marcador, flechas y formas"),
             ("Escribir", "⌃⌥T", "Escribe sobre la diapositiva"),
             ("Herramientas", "⌃⌥P", "Muestra u oculta esta barra"),
@@ -205,6 +215,7 @@ class Dock(_Glass):
         self._state: UiState | None = None
         self._collapsed = False
         self._ready = False
+        self._zoom_screens: tuple = ()
 
         self.mark = Mark()
         self.laser = IconButton("laser", checkable=True)
@@ -286,11 +297,18 @@ class Dock(_Glass):
         tools.addSpacing(6)
         tools.addWidget(self.quit_btn)
 
+        self.screens_box = _transparent(QWidget())
+        self._zoom_screen_row = QHBoxLayout(self.screens_box)
+        self._zoom_screen_row.setContentsMargins(0, 0, 0, 0)
+        self._zoom_screen_row.setSpacing(6)
+
         self.context = _transparent(QWidget())
         context = QHBoxLayout(self.context)
         context.setContentsMargins(0, 0, 0, 0)
         context.setSpacing(3)
         context.addStretch(1)
+        context.addWidget(self.screens_box)
+        self.screens_box.hide()
         context.addWidget(self.minus)
         context.addWidget(self.metric)
         context.addWidget(self.plus)
@@ -384,7 +402,7 @@ class Dock(_Glass):
         mode = state.mode
         self._set_checked(self.laser, mode == "laser")
         self._set_checked(self.spotlight, mode == "spotlight")
-        self._set_checked(self.zoom, mode == "zoom")
+        self._set_checked(self.zoom, mode == "zoom" or state.picking_zoom)
         self._set_checked(self.draw, mode == "draw")
         self._set_checked(self.text, mode == "text")
         self._set_checked(self.pan, mode == "zoom" and not state.inking)
@@ -435,20 +453,55 @@ class Dock(_Glass):
         self.hair_c.setVisible(self.undo.isVisible())
 
         hint = state.message or state.hint
-        if mode == "idle" and not state.message and not accessibility_trusted():
+        if mode == "idle" and not state.picking_zoom and not state.message and not accessibility_trusted():
             hint = "Activa Accesibilidad para esta app y poder usar los atajos"
         self.hint.setText(hint)
-        color = "#E7B15A" if state.message or (mode == "idle" and not accessibility_trusted()) else "rgba(247,244,236,0.55)"
+        color = "#E7B15A" if state.message or (mode == "idle" and not state.picking_zoom and not accessibility_trusted()) else "rgba(247,244,236,0.55)"
         self.hint.setStyleSheet(f"color: {color}; background: transparent;")
+
+        if state.picking_zoom:
+            self._refresh_zoom_screens()
+            for widget in (
+                self.minus, self.metric, self.plus, self.pan, self.frame, self.ink_text,
+                self.palette, self.shade, self.dim_slider, self.width_slider,
+                self.undo, self.clear_btn, self.hair_a, self.hair_b, self.hair_c,
+            ):
+                widget.hide()
+            for button in self.shapes.values():
+                button.hide()
+            self.screens_box.show()
+            self.done.show()
+        else:
+            self.screens_box.hide()
 
         self.tools.setVisible(not self._collapsed)
         self.hint.setVisible(not self._collapsed)
-        self.context.setVisible(not self._collapsed and mode != "idle")
+        self.context.setVisible(not self._collapsed and (mode != "idle" or state.picking_zoom))
         self.pill.setVisible(self._collapsed)
         self.adjustSize()
         self.update()
         if anchor is not None and self.size() != before:
             self._move_to_anchor(anchor)
+
+    def _refresh_zoom_screens(self) -> None:
+        screens = QGuiApplication.screens()
+        signature = tuple(
+            (screen.name(), screen.geometry().x(), screen.geometry().y(), screen.geometry().width(), screen.geometry().height())
+            for screen in screens
+        )
+        if signature == self._zoom_screens:
+            return
+        self._zoom_screens = signature
+        while self._zoom_screen_row.count():
+            item = self._zoom_screen_row.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+        for index, screen in enumerate(screens):
+            button = TextButton(_screen_label(screen))
+            button.clicked.connect(lambda _=False, i=index: self.action.emit(f"zoom-screen-{i}"))
+            self._zoom_screen_row.addWidget(button)
 
     def _move_to_anchor(self, anchor: QPoint) -> None:
         screen = QGuiApplication.screenAt(anchor) or QApplication.primaryScreen()

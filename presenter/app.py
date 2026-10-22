@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import QObject, QSettings, QTimer
-from PyQt6.QtGui import QAction, QCursor, QIcon, QKeySequence
+from PyQt6.QtGui import QAction, QCursor, QGuiApplication, QIcon, QKeySequence
 from PyQt6.QtWidgets import QApplication, QMenu, QMenuBar, QSystemTrayIcon
 
 from presenter.capture import screen_recording_allowed
@@ -38,6 +38,7 @@ class Presenter(QObject):
         self._esc_lock = False
         self._undo_lock = False
         self._capturing = False
+        self._zoom_screen = None
         self._lens_tick = 0
         self._keys_on = False
         self._key_wait = 0
@@ -98,6 +99,8 @@ class Presenter(QObject):
         self.dock.expand()
         if name not in ("nudge-up", "nudge-down", "undo", "clear"):
             self.guide.hide()
+        if self.overlay.picking_zoom and name != "zoom" and not name.startswith("zoom-screen-"):
+            self.overlay.picking_zoom = False
 
         if name == "done":
             self.overlay.exit_mode()
@@ -114,6 +117,12 @@ class Presenter(QObject):
                 self._begin_zoom()
                 return
             self.overlay.set_shape("pan")
+        elif name.startswith("zoom-screen-") and name.removeprefix("zoom-screen-").isdigit():
+            index = int(name.removeprefix("zoom-screen-"))
+            screens = QGuiApplication.screens()
+            if 0 <= index < len(screens):
+                self._begin_zoom(screens[index])
+                return
         elif name == "ink-text":
             if self.overlay.mode == "zoom":
                 self.overlay.set_shape("text")
@@ -127,8 +136,10 @@ class Presenter(QObject):
         elif name == "zoom":
             if self.overlay.mode == "zoom":
                 self.overlay.exit_mode()
+            elif len(QGuiApplication.screens()) > 1:
+                self.overlay.picking_zoom = not self.overlay.picking_zoom
             else:
-                self._begin_zoom()
+                self._begin_zoom(QApplication.primaryScreen())
                 return
         elif name in _MODES:
             self._enter(name)
@@ -163,12 +174,16 @@ class Presenter(QObject):
         else:
             self.overlay.set_mode(mode)
 
-    def _begin_zoom(self) -> None:
+    def _begin_zoom(self, screen=None) -> None:
+        self.overlay.picking_zoom = False
         if not screen_recording_allowed():
             request_screen_recording()
             self.overlay.notify("Permite Grabación de pantalla, cierra Presenter y ábrelo de nuevo.")
             self.sync()
             return
+        if screen is None:
+            screen = QGuiApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
+        self._zoom_screen = screen
         self._capturing = True
         self.guide.hide()
         self.lens.hide()
@@ -179,7 +194,9 @@ class Presenter(QObject):
 
     def _finish_zoom(self) -> None:
         self._capturing = False
-        captured = self.overlay.capture_and_zoom()
+        screen = self._zoom_screen
+        self._zoom_screen = None
+        captured = self.overlay.capture_and_zoom(screen)
         if not captured:
             request_screen_recording()
             self.overlay.notify("No se pudo capturar la pantalla. Permite Grabación de pantalla, cierra Presenter y ábrelo de nuevo.")

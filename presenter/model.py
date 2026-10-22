@@ -68,6 +68,7 @@ class UiState:
     can_undo: bool = False
     hint: str = ""
     message: str = ""
+    picking_zoom: bool = False
 
 
 def hits_stroke(stroke: Stroke, point: QPointF, radius: float) -> bool:

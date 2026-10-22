@@ -105,6 +105,17 @@ def _draw(painter: QPainter, name: str, color: QColor) -> None:
         painter.drawArc(QRectF(-5.5, -5.5, 11.0, 11.0), 40 * 16, 250 * 16)
         _arrow(painter, QPointF(-5.2, -1.5), QPointF(-7.4, 2.4), color, 1.6)
         return
+    if name == "trash":
+        painter.drawLine(QPointF(-5.4, -3.4), QPointF(5.4, -3.4))
+        painter.drawLine(QPointF(-1.7, -5.6), QPointF(1.7, -5.6))
+        painter.drawLine(QPointF(-1.7, -5.6), QPointF(-1.7, -3.4))
+        painter.drawLine(QPointF(1.7, -5.6), QPointF(1.7, -3.4))
+        painter.drawLine(QPointF(-4.4, -3.4), QPointF(-3.3, 5.6))
+        painter.drawLine(QPointF(4.4, -3.4), QPointF(3.3, 5.6))
+        painter.drawLine(QPointF(-3.3, 5.6), QPointF(3.3, 5.6))
+        painter.drawLine(QPointF(-1.15, -1.0), QPointF(-1.15, 3.5))
+        painter.drawLine(QPointF(1.15, -1.0), QPointF(1.15, 3.5))
+        return
     if name == "clear":
         painter.drawLine(QPointF(-4.2, -4.2), QPointF(4.2, 4.2))
         painter.drawLine(QPointF(-4.2, 4.2), QPointF(4.2, -4.2))

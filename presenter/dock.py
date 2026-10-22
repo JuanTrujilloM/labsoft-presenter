@@ -402,7 +402,7 @@ class Dock(_Glass):
         name_row = QHBoxLayout()
         name_row.setContentsMargins(0, 0, 0, 0)
         name_row.setSpacing(8)
-        self.roster_remove = TextButton("Eliminar")
+        self.roster_remove = IconButton("trash")
         name_row.addStretch(1)
         name_row.addWidget(self.roster_name)
         name_row.addWidget(self.roster_remove)

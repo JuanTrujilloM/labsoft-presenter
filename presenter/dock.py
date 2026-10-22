@@ -399,9 +399,18 @@ class Dock(_Glass):
         self.roster_name.setMinimumHeight(52)
         self.roster_name.setStyleSheet("color: #E7B15A; background: transparent;")
         roster_root.addLayout(roster_row)
-        roster_root.addWidget(self.roster_name)
+        name_row = QHBoxLayout()
+        name_row.setContentsMargins(0, 0, 0, 0)
+        name_row.setSpacing(8)
+        self.roster_remove = TextButton("Eliminar")
+        name_row.addStretch(1)
+        name_row.addWidget(self.roster_name)
+        name_row.addWidget(self.roster_remove)
+        name_row.addStretch(1)
+        roster_root.addLayout(name_row)
         self.roster_pick.hide()
         self.roster_name.hide()
+        self.roster_remove.hide()
         self.roster.hide()
 
         root = QVBoxLayout(self)
@@ -427,6 +436,7 @@ class Dock(_Glass):
         self.random_btn.clicked.connect(self._toggle_roster)
         self.roster_load.clicked.connect(self._load_roster)
         self.roster_pick.clicked.connect(self._pick_student)
+        self.roster_remove.clicked.connect(self._remove_picked)
         self.help.clicked.connect(lambda _=False: self.action.emit("help"))
         self.hide_btn.clicked.connect(lambda _=False: self.action.emit("hide"))
         self.quit_btn.clicked.connect(lambda _=False: self.action.emit("quit"))
@@ -630,6 +640,20 @@ class Dock(_Glass):
         if was_hidden or settle:
             self._relayout()
 
+    def _remove_picked(self) -> None:
+        if self._spinning or not self._picked:
+            return
+        name = self._picked
+        if name in self._names:
+            self._names.remove(name)
+        if name in self._pool:
+            self._pool.remove(name)
+        self._picked = ""
+        if not self._names:
+            self._pool = []
+            self._roster_error = "No quedan nombres"
+        self._relayout()
+
     def _cancel_spin(self) -> None:
         self._spin_timer.stop()
         self._spinning = False
@@ -655,6 +679,7 @@ class Dock(_Glass):
             shown = self._picked
             settled = True
         self.roster_name.setVisible(bool(shown))
+        self.roster_remove.setVisible(settled)
         if shown:
             self.roster_name.setText(shown)
             color = "#E7B15A" if settled else "rgba(247,244,236,0.78)"

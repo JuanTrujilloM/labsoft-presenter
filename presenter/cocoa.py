@@ -26,6 +26,21 @@ def screen_saver_level() -> int:
     return _LEVEL
 
 
+def set_native_level(widget: QWidget, level: int) -> None:
+    """Drop or restore the Cocoa window level so a file dialog can appear in front."""
+    if sys.platform != "darwin":
+        return
+    try:
+        import objc
+
+        view = objc.objc_object(c_void_p=int(widget.winId()))
+        window = view.window()
+        if window is not None:
+            window.setLevel_(int(level))
+    except Exception:
+        return
+
+
 def prepare_window(widget: QWidget, *, level_offset: int = 0, click_through: bool = False) -> None:
     if sys.platform != "darwin":
         return

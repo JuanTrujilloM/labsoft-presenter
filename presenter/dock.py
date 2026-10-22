@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import random
+from pathlib import Path
+
 from PyQt6.QtCore import QPoint, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QCursor, QFont, QGuiApplication, QPainter, QPen
-from PyQt6.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from presenter.capture import screen_recording_allowed
 from presenter.cocoa import (
@@ -12,6 +15,7 @@ from presenter.cocoa import (
     accessibility_trusted,
     request_accessibility,
     request_screen_recording,
+    set_native_level,
 )
 from presenter.icons import paint_icon
 from presenter.model import UiState
@@ -19,6 +23,10 @@ from presenter.theme import ACCENT, DOCK_PAD, DOCK_RADIUS, DOCK_SHADOW, GLASS, I
 from presenter.widgets import ColorDot, Hairline, IconButton, TextButton, ThinSlider
 
 _SHAPES = ("pen", "marker", "line", "arrow", "rect", "ellipse")
+
+
+def names_from_text(text: str) -> list[str]:
+    return [line.strip() for line in text.splitlines() if line.strip()]
 
 
 def _screen_label(screen) -> str:
@@ -216,6 +224,12 @@ class Dock(_Glass):
         self._collapsed = False
         self._ready = False
         self._zoom_screens: tuple = ()
+        self._roster_open = False
+        self._names: list[str] = []
+        self._pool: list[str] = []
+        self._picked = ""
+        self._roster_error = ""
+        self._flags_before_dialog = None
 
         self.mark = Mark()
         self.laser = IconButton("laser", checkable=True)
@@ -223,6 +237,7 @@ class Dock(_Glass):
         self.zoom = IconButton("zoom", checkable=True)
         self.draw = IconButton("draw", checkable=True)
         self.text = IconButton("text", checkable=True)
+        self.random_btn = IconButton("random", checkable=True)
         self.help = IconButton("help")
         self.hide_btn = IconButton("hide")
         self.quit_btn = TextButton("Salir")
@@ -292,6 +307,8 @@ class Dock(_Glass):
         tools.addWidget(self.draw)
         tools.addWidget(self.text)
         tools.addSpacing(6)
+        tools.addWidget(self.random_btn)
+        tools.addSpacing(6)
         tools.addWidget(self.help)
         tools.addWidget(self.hide_btn)
         tools.addSpacing(6)
@@ -329,11 +346,41 @@ class Dock(_Glass):
         context.addWidget(self.done)
         context.addStretch(1)
 
+        self.roster = _transparent(QWidget())
+        roster_root = QVBoxLayout(self.roster)
+        roster_root.setContentsMargins(0, 0, 0, 0)
+        roster_root.setSpacing(4)
+        roster_row = QHBoxLayout()
+        roster_row.setContentsMargins(0, 0, 0, 0)
+        roster_row.setSpacing(6)
+        self.roster_load = TextButton("Cargar lista")
+        self.roster_pick = TextButton("Elegir", gold=True)
+        self.roster_status = QLabel("")
+        self.roster_status.setFont(ui_font(12))
+        self.roster_status.setStyleSheet("color: rgba(247,244,236,0.62); background: transparent;")
+        roster_row.addStretch(1)
+        roster_row.addWidget(self.roster_load)
+        roster_row.addWidget(self.roster_pick)
+        roster_row.addWidget(self.roster_status)
+        roster_row.addStretch(1)
+        self.roster_name = QLabel("")
+        self.roster_name.setFont(ui_font(22, QFont.Weight.DemiBold))
+        self.roster_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.roster_name.setWordWrap(True)
+        self.roster_name.setMaximumWidth(480)
+        self.roster_name.setStyleSheet("color: #E7B15A; background: transparent;")
+        roster_root.addLayout(roster_row)
+        roster_root.addWidget(self.roster_name)
+        self.roster_pick.hide()
+        self.roster_name.hide()
+        self.roster.hide()
+
         root = QVBoxLayout(self)
         left, top, right, bottom = DOCK_SHADOW
         root.setContentsMargins(left + DOCK_PAD, top + DOCK_PAD, right + DOCK_PAD, bottom + DOCK_PAD)
         root.setSpacing(6)
         root.addWidget(self.tools)
+        root.addWidget(self.roster)
         root.addWidget(self.context)
         root.addWidget(self.hint)
         root.addWidget(self.pill)
@@ -348,6 +395,9 @@ class Dock(_Glass):
         self.zoom.clicked.connect(lambda _=False: self.action.emit("zoom"))
         self.draw.clicked.connect(lambda _=False: self.action.emit("draw"))
         self.text.clicked.connect(lambda _=False: self.action.emit("text"))
+        self.random_btn.clicked.connect(self._toggle_roster)
+        self.roster_load.clicked.connect(self._load_roster)
+        self.roster_pick.clicked.connect(self._pick_student)
         self.help.clicked.connect(lambda _=False: self.action.emit("help"))
         self.hide_btn.clicked.connect(lambda _=False: self.action.emit("hide"))
         self.quit_btn.clicked.connect(lambda _=False: self.action.emit("quit"))
@@ -477,11 +527,95 @@ class Dock(_Glass):
         self.tools.setVisible(not self._collapsed)
         self.hint.setVisible(not self._collapsed)
         self.context.setVisible(not self._collapsed and (mode != "idle" or state.picking_zoom))
+        self._sync_roster()
         self.pill.setVisible(self._collapsed)
         self.adjustSize()
         self.update()
         if anchor is not None and self.size() != before:
             self._move_to_anchor(anchor)
+
+    def _toggle_roster(self, _checked: bool = False) -> None:
+        self._roster_open = not self._roster_open
+        self._relayout()
+
+    def load_names(self, names: list[str]) -> None:
+        self._names = [name.strip() for name in names if name.strip()]
+        self._pool = list(self._names)
+        self._picked = ""
+        self._roster_error = "" if self._names else "Ese archivo no tiene nombres"
+        self._roster_open = True
+        self._relayout()
+
+    def _load_roster(self) -> None:
+        self._lower_for_dialog()
+        path, _selected = QFileDialog.getOpenFileName(
+            self,
+            "Cargar listado",
+            "",
+            "Texto (*.txt);;Todos los archivos (*)",
+        )
+        self._restore_after_dialog()
+        if not path:
+            return
+        try:
+            raw = Path(path).read_bytes()
+            try:
+                text = raw.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                text = raw.decode("latin-1")
+        except OSError:
+            self._roster_error = "No se pudo leer el archivo"
+            self._relayout()
+            return
+        self.load_names(names_from_text(text))
+
+    def _pick_student(self) -> None:
+        if not self._names:
+            return
+        if not self._pool:
+            self._pool = list(self._names)
+        self._picked = self._pool.pop(random.randrange(len(self._pool)))
+        self._relayout()
+
+    def _sync_roster(self) -> None:
+        self.roster.setVisible(self._roster_open and not self._collapsed)
+        self._set_checked(self.random_btn, self._roster_open)
+        self.roster_pick.setVisible(bool(self._names))
+        if self._names:
+            count = len(self._names)
+            self.roster_status.setText("1 nombre" if count == 1 else f"{count} nombres")
+        else:
+            self.roster_status.setText(self._roster_error)
+        self.roster_status.setVisible(bool(self.roster_status.text()))
+        self.roster_name.setVisible(bool(self._picked))
+        if self._picked:
+            self.roster_name.setText(self._picked)
+
+    def _relayout(self) -> None:
+        anchor = None
+        if self._ready:
+            geo = self.frameGeometry()
+            anchor = QPoint(geo.center().x(), geo.bottom())
+        before = self.size()
+        self._sync_roster()
+        self.adjustSize()
+        self.update()
+        if anchor is not None and self.size() != before:
+            self._move_to_anchor(anchor)
+
+    def _lower_for_dialog(self) -> None:
+        self._flags_before_dialog = self.windowFlags()
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, False)
+        self.show()
+        set_native_level(self, 0)
+
+    def _restore_after_dialog(self) -> None:
+        if self._flags_before_dialog is not None:
+            self.setWindowFlags(self._flags_before_dialog)
+            self._flags_before_dialog = None
+        self.show()
+        self.apply_native()
+        self.raise_()
 
     def _refresh_zoom_screens(self) -> None:
         screens = QGuiApplication.screens()

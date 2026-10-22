@@ -212,7 +212,6 @@ class Dock(_Glass):
         self.laser = IconButton("laser", "Láser    ⌃⌥L", checkable=True)
         self.spotlight = IconButton("spotlight", "Resaltar    ⌃⌥H", checkable=True)
         self.zoom = IconButton("zoom", "Zoom    ⌃⌥Z", checkable=True)
-        self.lens = IconButton("lens", "Lupa    ⌃⌥M", checkable=True)
         self.draw = IconButton("draw", "Dibujar    ⌃⌥D", checkable=True)
         self.text = IconButton("text", "Escribir    ⌃⌥T", checkable=True)
         self.help = IconButton("help", "Atajos")
@@ -287,7 +286,7 @@ class Dock(_Glass):
         tools.setSpacing(2)
         tools.addWidget(self.mark)
         tools.addSpacing(4)
-        for button in (self.laser, self.spotlight, self.zoom, self.lens):
+        for button in (self.laser, self.spotlight, self.zoom):
             tools.addWidget(button)
         tools.addSpacing(6)
         tools.addWidget(self.draw)
@@ -340,7 +339,6 @@ class Dock(_Glass):
         self.laser.clicked.connect(lambda _=False: self.action.emit("laser"))
         self.spotlight.clicked.connect(lambda _=False: self.action.emit("spotlight"))
         self.zoom.clicked.connect(lambda _=False: self.action.emit("zoom"))
-        self.lens.clicked.connect(lambda _=False: self.action.emit("lens"))
         self.draw.clicked.connect(lambda _=False: self.action.emit("draw"))
         self.text.clicked.connect(lambda _=False: self.action.emit("text"))
         self.help.clicked.connect(lambda _=False: self.action.emit("help"))
@@ -398,7 +396,6 @@ class Dock(_Glass):
         self._set_checked(self.laser, mode == "laser")
         self._set_checked(self.spotlight, mode == "spotlight")
         self._set_checked(self.zoom, mode == "zoom")
-        self._set_checked(self.lens, mode == "lens")
         self._set_checked(self.draw, mode == "draw")
         self._set_checked(self.text, mode == "text")
         self._set_checked(self.pan, mode == "zoom" and not state.inking)

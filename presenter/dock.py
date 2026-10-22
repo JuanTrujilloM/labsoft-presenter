@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from pathlib import Path
 
-from PyQt6.QtCore import QPoint, QRectF, Qt, pyqtSignal
+from PyQt6.QtCore import QPoint, QRectF, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QCursor, QFont, QGuiApplication, QPainter, QPen
 from PyQt6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
@@ -27,6 +27,27 @@ _SHAPES = ("pen", "marker", "line", "arrow", "rect", "ellipse")
 
 def names_from_text(text: str) -> list[str]:
     return [line.strip() for line in text.splitlines() if line.strip()]
+
+
+def spin_sequence(names: list[str], winner: str, length: int = 15) -> list[str]:
+    """Teaser names, then the chosen one. The winner stays off the reel until the end."""
+    teasers = 4 if len(names) < 2 else max(length - 1, 1)
+    frames: list[str] = []
+    previous = None
+    for _ in range(teasers):
+        options = [name for name in names if name != previous and name != winner]
+        if not options:
+            options = [name for name in names if name != previous] or list(names)
+        previous = random.choice(options)
+        frames.append(previous)
+    frames.append(winner)
+    return frames
+
+
+def _spin_delay(index: int, total: int) -> int:
+    span = max(total - 1, 1)
+    progress = index / span
+    return int(32 + (progress * progress) * 170)
 
 
 def _screen_label(screen) -> str:
@@ -230,6 +251,12 @@ class Dock(_Glass):
         self._picked = ""
         self._roster_error = ""
         self._flags_before_dialog = None
+        self._spinning = False
+        self._spin_frames: list[str] = []
+        self._spin_index = 0
+        self._spin_timer = QTimer(self)
+        self._spin_timer.setSingleShot(True)
+        self._spin_timer.timeout.connect(self._spin_tick)
 
         self.mark = Mark()
         self.laser = IconButton("laser", checkable=True)
@@ -368,6 +395,8 @@ class Dock(_Glass):
         self.roster_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.roster_name.setWordWrap(True)
         self.roster_name.setMaximumWidth(480)
+        self.roster_name.setMinimumWidth(320)
+        self.roster_name.setMinimumHeight(52)
         self.roster_name.setStyleSheet("color: #E7B15A; background: transparent;")
         roster_root.addLayout(roster_row)
         roster_root.addWidget(self.roster_name)
@@ -539,6 +568,7 @@ class Dock(_Glass):
         self._relayout()
 
     def load_names(self, names: list[str]) -> None:
+        self._cancel_spin()
         self._names = [name.strip() for name in names if name.strip()]
         self._pool = list(self._names)
         self._picked = ""
@@ -570,26 +600,65 @@ class Dock(_Glass):
         self.load_names(names_from_text(text))
 
     def _pick_student(self) -> None:
-        if not self._names:
+        if not self._names or self._spinning:
             return
         if not self._pool:
             self._pool = list(self._names)
-        self._picked = self._pool.pop(random.randrange(len(self._pool)))
-        self._relayout()
+        winner = self._pool.pop(random.randrange(len(self._pool)))
+        self._picked = winner
+        self._spin_frames = spin_sequence(self._names, winner)
+        self._spin_index = 0
+        self._spinning = True
+        self._present_spin(settle=False)
+        self._spin_timer.start(_spin_delay(0, len(self._spin_frames)))
+
+    def _spin_tick(self) -> None:
+        if not self._spinning:
+            return
+        self._spin_index += 1
+        if self._spin_index >= len(self._spin_frames) - 1:
+            self._spin_index = len(self._spin_frames) - 1
+            self._spinning = False
+            self._present_spin(settle=True)
+            return
+        self._present_spin(settle=False)
+        self._spin_timer.start(_spin_delay(self._spin_index, len(self._spin_frames)))
+
+    def _present_spin(self, *, settle: bool) -> None:
+        was_hidden = not self.roster_name.isVisible()
+        self._sync_roster()
+        if was_hidden or settle:
+            self._relayout()
+
+    def _cancel_spin(self) -> None:
+        self._spin_timer.stop()
+        self._spinning = False
+        self._spin_frames = []
+        self._spin_index = 0
 
     def _sync_roster(self) -> None:
         self.roster.setVisible(self._roster_open and not self._collapsed)
         self._set_checked(self.random_btn, self._roster_open)
         self.roster_pick.setVisible(bool(self._names))
+        self.roster_pick.setEnabled(bool(self._names) and not self._spinning)
         if self._names:
             count = len(self._names)
             self.roster_status.setText("1 nombre" if count == 1 else f"{count} nombres")
         else:
             self.roster_status.setText(self._roster_error)
         self.roster_status.setVisible(bool(self.roster_status.text()))
-        self.roster_name.setVisible(bool(self._picked))
-        if self._picked:
-            self.roster_name.setText(self._picked)
+        shown = ""
+        settled = False
+        if self._spinning and self._spin_frames:
+            shown = self._spin_frames[min(self._spin_index, len(self._spin_frames) - 1)]
+        elif self._picked:
+            shown = self._picked
+            settled = True
+        self.roster_name.setVisible(bool(shown))
+        if shown:
+            self.roster_name.setText(shown)
+            color = "#E7B15A" if settled else "rgba(247,244,236,0.78)"
+            self.roster_name.setStyleSheet(f"color: {color}; background: transparent;")
 
     def _relayout(self) -> None:
         anchor = None

@@ -18,7 +18,7 @@ from presenter.model import UiState
 from presenter.theme import ACCENT, DOCK_PAD, DOCK_RADIUS, DOCK_SHADOW, GLASS, IVORY, PALETTE, format_mag, ui_font
 from presenter.widgets import ColorDot, Hairline, IconButton, TextButton, ThinSlider
 
-_SHAPES = ("pen", "marker", "line", "arrow", "rect", "ellipse", "eraser")
+_SHAPES = ("pen", "marker", "line", "arrow", "rect", "ellipse")
 
 
 def _transparent(widget: QWidget) -> QWidget:
@@ -33,7 +33,6 @@ class Mark(QWidget):
         super().__init__(parent)
         self.setFixedSize(34, 36)
         self.setCursor(Qt.CursorShape.OpenHandCursor)
-        self.setToolTip("Arrastra para mover")
         self._offset: QPoint | None = None
 
     def paintEvent(self, _event) -> None:  # noqa: N802
@@ -99,7 +98,6 @@ class Guide(_Glass):
             ("Resaltar", "⌃⌥H", "Oscurece la sala y enmarca un elemento"),
             ("Láser", "⌃⌥L", "La luz es el puntero"),
             ("Zoom", "⌃⌥Z", "Congela la pantalla y la amplía"),
-            ("Lupa", "⌃⌥M", "Una lupa sobre el puntero"),
             ("Dibujar", "⌃⌥D", "Pluma, marcador, flechas y formas"),
             ("Escribir", "⌃⌥T", "Escribe sobre la diapositiva"),
             ("Herramientas", "⌃⌥P", "Muestra u oculta esta barra"),
@@ -153,7 +151,7 @@ class Guide(_Glass):
             self.access_label.setText("Activa Accesibilidad para esta app y poder usar los atajos.")
             self.allow_access.show()
         if screen_recording_allowed():
-            self.screen_label.setText("La captura de pantalla está lista para el zoom y la lupa.")
+            self.screen_label.setText("La captura de pantalla está lista para el zoom.")
             self.allow_screen.hide()
         else:
             self.screen_label.setText("Permite Grabación de pantalla, cierra Presenter y ábrelo de nuevo.")
@@ -209,18 +207,17 @@ class Dock(_Glass):
         self._ready = False
 
         self.mark = Mark()
-        self.laser = IconButton("laser", "Láser    ⌃⌥L", checkable=True)
-        self.spotlight = IconButton("spotlight", "Resaltar    ⌃⌥H", checkable=True)
-        self.zoom = IconButton("zoom", "Zoom    ⌃⌥Z", checkable=True)
-        self.draw = IconButton("draw", "Dibujar    ⌃⌥D", checkable=True)
-        self.text = IconButton("text", "Escribir    ⌃⌥T", checkable=True)
-        self.help = IconButton("help", "Atajos")
-        self.hide_btn = IconButton("hide", "Ocultar herramientas    ⌃⌥P")
+        self.laser = IconButton("laser", checkable=True)
+        self.spotlight = IconButton("spotlight", checkable=True)
+        self.zoom = IconButton("zoom", checkable=True)
+        self.draw = IconButton("draw", checkable=True)
+        self.text = IconButton("text", checkable=True)
+        self.help = IconButton("help")
+        self.hide_btn = IconButton("hide")
         self.quit_btn = TextButton("Salir")
-        self.quit_btn.setToolTip("Salir de Presenter")
 
-        self.minus = IconButton("minus", "Reducir")
-        self.plus = IconButton("plus", "Aumentar")
+        self.minus = IconButton("minus")
+        self.plus = IconButton("plus")
         self.metric = QLabel("2×")
         self.metric.setFont(ui_font(12, QFont.Weight.Medium))
         self.metric.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -232,16 +229,9 @@ class Dock(_Glass):
         self.frame = TextButton("Marco")
         self.frame.setCheckable(True)
         self.shapes = {
-            name: IconButton(name, name.capitalize(), checkable=True) for name in _SHAPES
+            name: IconButton(name, checkable=True) for name in _SHAPES
         }
-        self.shapes["pen"].setToolTip("Pluma")
-        self.shapes["marker"].setToolTip("Marcador")
-        self.shapes["line"].setToolTip("Línea")
-        self.shapes["arrow"].setToolTip("Flecha")
-        self.shapes["rect"].setToolTip("Rectángulo")
-        self.shapes["ellipse"].setToolTip("Elipse")
-        self.shapes["eraser"].setToolTip("Borrador")
-        self.ink_text = IconButton("text", "Escribir sobre la diapositiva ampliada", checkable=True)
+        self.ink_text = IconButton("text", checkable=True)
 
         self.dots = [ColorDot(color) for color in PALETTE]
         self.palette = _transparent(QWidget())
@@ -257,7 +247,7 @@ class Dock(_Glass):
         self.shade = QLabel("Sombra")
         self.shade.setFont(ui_font(11))
         self.shade.setStyleSheet("color: rgba(247,244,236,0.55); background: transparent;")
-        self.undo = IconButton("undo", "Deshacer    ⌘Z")
+        self.undo = IconButton("undo")
         self.clear_btn = TextButton("Borrar")
         self.done = TextButton("Listo", gold=True)
         self.hair_a = Hairline()
@@ -276,7 +266,6 @@ class Dock(_Glass):
         pill_row.setSpacing(4)
         self.pill_mark = Mark()
         self.pill_btn = TextButton("Presenter", gold=True)
-        self.pill_btn.setToolTip("Mostrar herramientas")
         pill_row.addWidget(self.pill_mark)
         pill_row.addWidget(self.pill_btn)
 

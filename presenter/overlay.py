@@ -7,6 +7,7 @@ from PyQt6.QtCore import (
     QPoint,
     QPointF,
     QRectF,
+    QTimer,
     Qt,
     pyqtSignal,
 )
@@ -33,11 +34,17 @@ _HINTS = {
     "idle": "Resalta, amplía y escribe sobre la diapositiva",
     "laser": "La luz es el puntero",
     "spotlight": "Pulsa Marco y arrastra alrededor de un elemento  ·  ⌥ y arrastrar también enmarca",
-    "zoom": "Muévete para mirar  ·  desplázate para ampliar  ·  elige un lápiz para escribir",
+    "zoom": "Muévete para mirar  ·  doble clic pasa al lápiz  ·  desplázate para ampliar",
     "lens": "Una lupa sigue al puntero  ·  + y − cambian la potencia",
     "draw": "La tinta permanece al salir  ·  ⌘Z deshace",
     "text": "Haz clic donde debe ir el texto y escribe  ·  Enter lo coloca",
 }
+
+
+def _is_tap(points: list[QPointF]) -> bool:
+    if len(points) <= 1:
+        return True
+    return max(dist(points[0], point) for point in points) < 6
 
 
 class InkEditor(QTextEdit):
@@ -79,6 +86,71 @@ class InkEditor(QTextEdit):
         self.setFixedHeight(max(self.fontMetrics().height() + 4, min(360, rect.height() + 6)))
 
 
+def _screen_key(screen) -> tuple[int, int, int, int]:
+    geo = screen.geometry()
+    return (geo.x(), geo.y(), geo.width(), geo.height())
+
+
+def _ink_hits(document: Document, screen) -> bool:
+    area = QRectF(screen.geometry())
+    for stroke in document.strokes:
+        if any(area.contains(point) for point in stroke.points):
+            return True
+    for note in document.notes:
+        rect = QRectF(note.origin, note.bounds.size())
+        if rect.intersects(area):
+            return True
+    for frame in document.frames:
+        if QRectF(frame.rect).intersects(area):
+            return True
+    return False
+
+
+def _paint_ink(painter: QPainter, document: Document, origin: QPointF) -> None:
+    def local(point: QPointF) -> QPointF:
+        return QPointF(point.x() - origin.x(), point.y() - origin.y())
+
+    for stroke in document.strokes:
+        paint_stroke(painter, stroke, [local(point) for point in stroke.points], 1.0)
+    for note in document.notes:
+        paint_note(painter, note, local(note.origin), 1.0)
+    for frame in document.frames:
+        rect = frame.rect
+        paint_frame(painter, QRectF(local(rect.topLeft()), local(rect.bottomRight())).normalized(), 1.0)
+
+
+class InkSheet(FloatingWindow):
+    """Click-through copy of the ink left on a screen the pointer has left."""
+
+    level_offset = -1
+
+    def __init__(self, document: Document) -> None:
+        super().__init__()
+        self.doc = document
+        self.origin = QPointF()
+        self.set_click_through(True)
+        self.hide()
+
+    def place(self, screen) -> None:
+        geo = screen.geometry()
+        self.winId()
+        handle = self.windowHandle()
+        if handle is not None and handle.screen() is not screen:
+            handle.setScreen(screen)
+        self.setGeometry(geo)
+        self.origin = QPointF(geo.topLeft())
+
+    def paintEvent(self, _event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        _paint_ink(painter, self.doc, self.origin)
+        painter.end()
+
+
 class Overlay(FloatingWindow):
     changed = pyqtSignal()
     escapeRequested = pyqtSignal()
@@ -112,6 +184,7 @@ class Overlay(FloatingWindow):
         self._frame_origin: QPointF | None = None
         self._option_dragging = False
         self._erasing = False
+        self._click_token = 0
         self._last_cursor = QPoint()
         self._hover = QPointF()
         self._editor_anchor: QPointF | None = None
@@ -122,6 +195,8 @@ class Overlay(FloatingWindow):
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._blank = self._make_blank_cursor()
+        self._sheets: dict[tuple[int, int, int, int], InkSheet] = {}
+        self.changed.connect(self._sync_sheets)
         self.hide()
 
     def ui_state(self) -> UiState:
@@ -392,6 +467,20 @@ class Overlay(FloatingWindow):
         self._press(event.position())
         event.accept()
 
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
+        if self.mode != "zoom" or event.button() != Qt.MouseButton.LeftButton:
+            super().mouseDoubleClickEvent(event)
+            return
+        self._cancel_click_commit()
+        self._live_points = []
+        if self.editor.isVisible():
+            self._commit_editor()
+        if self.shape == "pen" and self.inking:
+            self.set_shape("pan")
+        else:
+            self.set_shape("pen")
+        event.accept()
+
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
         pos = event.position()
         self._hover = pos
@@ -427,6 +516,9 @@ class Overlay(FloatingWindow):
             self.update()
             return
         if self._live_points:
+            if self.mode == "zoom" and _is_tap(self._live_points):
+                self._arm_click_commit()
+                return
             self._commit_stroke()
             return
         if self.framing and self._frame_origin is not None:
@@ -501,6 +593,8 @@ class Overlay(FloatingWindow):
             return "Arrastra alrededor del elemento que quieres mostrar"
         if self.mode == "zoom" and self.inking and self.shape == "text":
             return "Haz clic en la diapositiva ampliada y escribe  ·  mantén Espacio para mirar"
+        if self.mode == "zoom" and self.inking and self.shape == "pen":
+            return "Dibuja con el lápiz  ·  doble clic vuelve a mover"
         if self.mode == "zoom" and self.inking:
             return "Dibuja sobre la diapositiva ampliada  ·  mantén Espacio para mirar"
         return _HINTS.get(self.mode, _HINTS["idle"])
@@ -522,6 +616,29 @@ class Overlay(FloatingWindow):
         else:
             self.hide()
         self.changed.emit()
+
+    def _sync_sheets(self) -> None:
+        screens = QGuiApplication.screens()
+        live = {_screen_key(screen): screen for screen in screens}
+        for key in list(self._sheets):
+            if key not in live:
+                self._sheets.pop(key).hide()
+        covered = _screen_key(self._screen) if self.isVisible() and self._screen is not None else None
+        for key, screen in live.items():
+            show = self.doc.has_ink and key != covered and _ink_hits(self.doc, screen)
+            sheet = self._sheets.get(key)
+            if not show:
+                if sheet is not None and sheet.isVisible():
+                    sheet.hide()
+                continue
+            if sheet is None:
+                sheet = InkSheet(self.doc)
+                self._sheets[key] = sheet
+            sheet.place(screen)
+            if not sheet.isVisible():
+                sheet.show()
+            sheet.apply_native()
+            sheet.update()
 
     def _apply_interaction(self) -> None:
         capture = self.captures_mouse()
@@ -560,6 +677,19 @@ class Overlay(FloatingWindow):
         if not self.inking or self.shape in ("pan", "text"):
             return True
         return self.space_held
+
+    def _arm_click_commit(self) -> None:
+        self._click_token += 1
+        token = self._click_token
+        QTimer.singleShot(QApplication.doubleClickInterval() + 40, lambda: self._finish_click(token))
+
+    def _cancel_click_commit(self) -> None:
+        self._click_token += 1
+
+    def _finish_click(self, token: int) -> None:
+        if token != self._click_token or not self._live_points:
+            return
+        self._commit_stroke()
 
     def _press(self, pos: QPointF) -> None:
         global_pos = self.widget_to_global(pos)
@@ -860,6 +990,7 @@ class Overlay(FloatingWindow):
         self.place(screen)
         self.apply_native()
         self.update()
+        self._sync_sheets()
 
     @staticmethod
     def _make_blank_cursor():

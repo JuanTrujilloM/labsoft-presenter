@@ -22,7 +22,7 @@ from presenter.model import Document
 from presenter.overlay import Overlay
 
 _MODES = ("laser", "spotlight", "lens", "draw", "text")
-_SHAPES = ("pen", "marker", "line", "arrow", "rect", "ellipse", "eraser")
+_SHAPES = ("pen", "marker", "line", "arrow", "rect", "ellipse")
 
 
 class Presenter(QObject):
@@ -299,7 +299,6 @@ class Presenter(QObject):
             ("Resaltar", "spotlight"),
             ("Láser", "laser"),
             ("Zoom", "zoom"),
-            ("Lupa", "lens"),
             ("Dibujar", "draw"),
             ("Escribir", "text"),
         ):

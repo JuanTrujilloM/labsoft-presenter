@@ -11,10 +11,9 @@ from presenter.theme import ACCENT, IVORY, ui_font
 
 
 class IconButton(QAbstractButton):
-    def __init__(self, name: str, tip: str, *, checkable: bool = False, parent=None) -> None:
+    def __init__(self, name: str, *, checkable: bool = False, parent=None) -> None:
         super().__init__(parent)
         self._name = name
-        self.setToolTip(tip)
         self.setCheckable(checkable)
         self.setFixedSize(40, 40)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -97,7 +96,6 @@ class ColorDot(QAbstractButton):
         self.setCheckable(True)
         self.setFixedSize(22, 22)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setToolTip(hex_color)
 
     def enterEvent(self, event) -> None:  # noqa: N802
         self.update()

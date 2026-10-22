@@ -60,6 +60,19 @@ def _screen_label(screen) -> str:
     return name if len(name) <= 18 else name[:17] + "…"
 
 
+class _RowIcon(QWidget):
+    def __init__(self, name: str) -> None:
+        super().__init__()
+        self._name = name
+        self.setFixedSize(22, 22)
+
+    def paintEvent(self, _event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        paint_icon(painter, self._name, QRectF(self.rect()), IVORY)
+        painter.end()
+
+
 def _transparent(widget: QWidget) -> QWidget:
     widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
     widget.setAutoFillBackground(False)
@@ -134,18 +147,18 @@ class Guide(_Glass):
         root.addSpacing(4)
 
         rows = (
-            ("Resaltar", "⌃⌥H", "Oscurece la sala y enmarca un elemento"),
-            ("Láser", "⌃⌥L", "La luz es el puntero"),
-            ("Zoom", "⌃⌥Z", "Elige la pantalla y amplía solo ahí"),
-            ("Dibujar", "⌃⌥D", "Pluma, marcador, flechas y formas"),
-            ("Escribir", "⌃⌥T", "Escribe sobre la diapositiva"),
-            ("Azar", "dado", "Carga nombres, elige uno y quita quien no está"),
-            ("Herramientas", "⌃⌥P", "Muestra u oculta esta barra"),
-            ("Volver", "Esc", "Un paso atrás. La tinta se queda"),
-            ("Deshacer", "⌘Z", "Quita la última marca"),
+            ("spotlight", "Resaltar", "⌃⌥H", "Enmarca un elemento"),
+            ("laser", "Láser", "⌃⌥L", "La luz es el puntero"),
+            ("zoom", "Zoom", "⌃⌥Z", "Amplía la pantalla"),
+            ("draw", "Dibujar", "⌃⌥D", "Trazo y formas"),
+            ("text", "Escribir", "⌃⌥T", "Texto en la diapositiva"),
+            ("random", "Azar", "dado", "Sortea un nombre"),
+            ("hide", "Herramientas", "⌃⌥P", "Muestra u oculta"),
+            ("back", "Volver", "Esc", "Un paso atrás"),
+            ("undo", "Deshacer", "⌘Z", "Quita lo último"),
         )
-        for name, keys, detail in rows:
-            root.addWidget(self._row(name, keys, detail))
+        for icon, name, keys, detail in rows:
+            root.addWidget(self._row(icon, name, keys, detail))
 
         root.addSpacing(6)
         self.access_label = self._note("")
@@ -206,15 +219,16 @@ class Guide(_Glass):
         return label
 
     @staticmethod
-    def _row(name: str, keys: str, detail: str) -> QWidget:
+    def _row(icon: str, name: str, keys: str, detail: str) -> QWidget:
         row = _transparent(QWidget())
         layout = QHBoxLayout(row)
         layout.setContentsMargins(0, 1, 0, 1)
         layout.setSpacing(8)
+        layout.addWidget(_RowIcon(icon))
         title = QLabel(name)
         title.setFont(ui_font(13, QFont.Weight.Medium))
         title.setStyleSheet("color: #F7F4EC; background: transparent;")
-        title.setFixedWidth(124)
+        title.setFixedWidth(108)
         badge = QLabel(keys)
         badge.setFont(ui_font(11, QFont.Weight.Medium))
         badge.setAlignment(Qt.AlignmentFlag.AlignCenter)

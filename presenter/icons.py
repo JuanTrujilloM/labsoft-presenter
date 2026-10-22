@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
-from PyQt6.QtGui import QColor, QPainter, QPen, QPixmap
+from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
 
 from presenter.theme import ACCENT, IVORY
 
@@ -59,13 +59,34 @@ def _draw(painter: QPainter, name: str, color: QColor) -> None:
         painter.drawEllipse(QPointF(0, 0), 3.3, 3.3)
         return
     if name == "draw":
-        painter.drawLine(QPointF(-6.2, 6.4), QPointF(4.6, -4.4))
-        painter.drawLine(QPointF(4.0, -3.6), QPointF(7.2, -6.8))
-        painter.drawLine(QPointF(3.2, -6.2), QPointF(6.4, -3.0))
+        painter.save()
+        painter.rotate(-38)
+        painter.drawLine(QPointF(-2.2, -6.6), QPointF(2.2, -6.6))
+        painter.drawLine(QPointF(-2.2, -6.6), QPointF(-2.2, -4.5))
+        painter.drawLine(QPointF(2.2, -6.6), QPointF(2.2, -4.5))
+        painter.drawLine(QPointF(-2.2, -4.5), QPointF(2.2, -4.5))
+        painter.drawLine(QPointF(-2.2, -3.4), QPointF(2.2, -3.4))
+        painter.drawLine(QPointF(-2.2, -4.5), QPointF(-2.2, 2.2))
+        painter.drawLine(QPointF(2.2, -4.5), QPointF(2.2, 2.2))
+        painter.drawLine(QPointF(-2.2, 2.2), QPointF(0, 6.8))
+        painter.drawLine(QPointF(2.2, 2.2), QPointF(0, 6.8))
+        painter.drawLine(QPointF(-0.85, 4.55), QPointF(0.85, 4.55))
+        painter.restore()
         return
     if name == "text":
-        painter.drawLine(QPointF(-5.4, -6.0), QPointF(5.4, -6.0))
-        painter.drawLine(QPointF(0, -6.0), QPointF(0, 6.6))
+        letter = QPainterPath()
+        letter.moveTo(-6.2, -6.4)
+        letter.lineTo(6.2, -6.4)
+        letter.lineTo(6.2, -3.7)
+        letter.lineTo(1.45, -3.7)
+        letter.lineTo(1.45, 6.5)
+        letter.lineTo(-1.45, 6.5)
+        letter.lineTo(-1.45, -3.7)
+        letter.lineTo(-6.2, -3.7)
+        letter.closeSubpath()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color)
+        painter.drawPath(letter)
         return
     if name == "pen":
         painter.drawLine(QPointF(-5.5, 6.5), QPointF(5.2, -4.2))
@@ -100,6 +121,11 @@ def _draw(painter: QPainter, name: str, color: QColor) -> None:
         pen.setStyle(Qt.PenStyle.DashLine)
         painter.setPen(pen)
         painter.drawRoundedRect(QRectF(-6.4, -5.0, 12.8, 10.0), 2.2, 2.2)
+        return
+    if name == "back":
+        painter.drawLine(QPointF(5.4, 0), QPointF(-5.2, 0))
+        painter.drawLine(QPointF(-5.2, 0), QPointF(-1.6, -3.4))
+        painter.drawLine(QPointF(-5.2, 0), QPointF(-1.6, 3.4))
         return
     if name == "undo":
         painter.drawArc(QRectF(-5.5, -5.5, 11.0, 11.0), 40 * 16, 250 * 16)

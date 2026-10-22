@@ -11,9 +11,24 @@ uv run presenter
 
 La barra queda en la parte inferior de la pantalla. Arrastra el anillo dorado para moverla.
 
+## Aplicación de escritorio
+
+Hay que empaquetar en el mismo sistema donde se va a usar.
+
+En macOS, el comando crea `dist/Presenter.app`. Ábrela con doble clic o cópiala a Aplicaciones. Antes, genera el icono con `uv run python packaging/make_icon.py`. La primera vez, macOS pide Accesibilidad y Grabación de pantalla para **Presenter**.
+
+En Windows, el mismo comando crea `dist/Presenter.exe`.
+
+En Linux, crea la carpeta `dist/Presenter/`. El programa es `dist/Presenter/Presenter`. Dale permiso de ejecución si hace falta (`chmod +x dist/Presenter/Presenter`) y ábrelo desde ahí. Los atajos globales y la captura del zoom funcionan en X11; en Wayland el escritorio suele bloquearlos. El dibujo, la barra y el resto de la app siguen disponibles.
+
+```bash
+uv sync --group package
+uv run pyinstaller presenter.spec --noconfirm
+```
+
 ## Permisos de macOS
 
-Presenter necesita dos permisos, y macOS se los concede a la app que abre Python (Terminal, iTerm o Cursor):
+Presenter necesita dos permisos. Si lo abres con `uv run`, macOS se los concede a la app que abre Python (Terminal, iTerm o Cursor). Si abres `Presenter.app`, se los concede a Presenter:
 
 - **Accesibilidad** — atajos de teclado y enmarcar mientras sigues presentando.
 - **Grabación de pantalla** — el zoom.

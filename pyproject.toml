@@ -15,6 +15,11 @@ dependencies = [
 [project.scripts]
 presenter = "presenter.__main__:main"
 
+[dependency-groups]
+package = [
+    "pyinstaller>=6.11",
+]
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"

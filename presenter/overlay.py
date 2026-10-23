@@ -858,8 +858,8 @@ class Overlay(FloatingWindow):
 
     def _open_editor(self, anchor: QPointF, widget_pos: QPointF) -> None:
         self._editor_anchor = anchor
-        self._style_editor()
         self.editor.clear()
+        self._style_editor()
         self.editor.move(int(widget_pos.x()), int(widget_pos.y()))
         self.editor.fit()
         self.editor.show()
@@ -890,22 +890,32 @@ class Overlay(FloatingWindow):
         self.update()
 
     def _style_editor(self) -> None:
+        from PyQt6.QtGui import QTextCharFormat
+
         from presenter.ink import note_font
 
         size = max(12, int(round(self.text_size * self._ink_scale())))
         font = note_font(size)
-        self.editor.setFont(font)
         color = self.color.name()
+        family = font.family().replace('"', "")
         self.editor.setStyleSheet(
             "QTextEdit, QTextEdit viewport {"
             "background: transparent;"
             f"color: {color};"
+            f'font-family: "{family}";'
+            f"font-size: {size}pt;"
+            "font-weight: 500;"
             "border: none;"
             "padding: 0px;"
             "selection-background-color: rgba(231, 177, 90, 0.35);"
             "}"
         )
         self.editor.viewport().setStyleSheet("background: transparent;")
+        self.editor.setFont(font)
+        self.editor.document().setDefaultFont(font)
+        fmt = QTextCharFormat()
+        fmt.setFont(font)
+        self.editor.setCurrentCharFormat(fmt)
 
     def _reposition_editor(self) -> None:
         if not self.editor.isVisible() or self._editor_anchor is None:

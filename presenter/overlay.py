@@ -21,7 +21,7 @@ from PyQt6.QtGui import (
     QPixmap,
     QRadialGradient,
 )
-from PyQt6.QtWidgets import QApplication, QFrame, QTextEdit
+from PyQt6.QtWidgets import QApplication, QFrame, QTextEdit, QWidget
 
 from presenter.capture import capture_screen
 from presenter.cocoa import FloatingWindow, activate_app
@@ -47,6 +47,27 @@ def _is_tap(points: list[QPointF]) -> bool:
     return max(dist(points[0], point) for point in points) < 6
 
 
+class _CaretBar(QWidget):
+    """Gold insertion mark. The native caret never reaches a translucent window."""
+
+    def __init__(self, parent) -> None:
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.hide()
+
+    def paintEvent(self, _event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        if not painter.isActive():
+            return
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(12, 12, 14))
+        painter.drawRect(self.rect())
+        painter.setBrush(ACCENT)
+        painter.drawRect(self.rect().adjusted(1, 1, -1, -1))
+        painter.end()
+
+
 class InkEditor(QTextEdit):
     commitRequested = pyqtSignal()
     cancelRequested = pyqtSignal()
@@ -62,7 +83,13 @@ class InkEditor(QTextEdit):
         self.setAutoFillBackground(False)
         self.viewport().setAutoFillBackground(False)
         self.document().setDocumentMargin(0)
+        self.setCursorWidth(0)
         self.setMinimumSize(8, 8)
+        self._caret_on = True
+        self._caret_timer = QTimer(self)
+        self._caret_timer.timeout.connect(self._toggle_caret)
+        self._caret_bar = _CaretBar(self.viewport())
+        self.cursorPositionChanged.connect(self._wake_caret)
         self.hide()
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
@@ -78,12 +105,53 @@ class InkEditor(QTextEdit):
             return
         super().keyPressEvent(event)
         self.fit()
+        self._sync_caret()
 
     def fit(self) -> None:
         sample = self.toPlainText() or " "
         rect = self.fontMetrics().boundingRect(0, 0, 680, 480, int(Qt.TextFlag.TextDontClip), sample)
         self.setFixedWidth(max(20, min(680, rect.width() + 8)))
         self.setFixedHeight(max(self.fontMetrics().height() + 4, min(360, rect.height() + 6)))
+        self._sync_caret()
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        self._wake_caret()
+
+    def hideEvent(self, event) -> None:  # noqa: N802
+        self._caret_timer.stop()
+        super().hideEvent(event)
+
+    def focusInEvent(self, event) -> None:  # noqa: N802
+        super().focusInEvent(event)
+        self._wake_caret()
+
+    def focusOutEvent(self, event) -> None:  # noqa: N802
+        self._caret_on = False
+        self._caret_timer.stop()
+        super().focusOutEvent(event)
+        self.viewport().update()
+
+    def _sync_caret(self) -> None:
+        rect = self.cursorRect()
+        if rect.height() >= 2:
+            self._caret_bar.setGeometry(max(0, rect.x()), rect.y(), 4, rect.height())
+        show = self._caret_on and self.hasFocus() and self.isVisible() and rect.height() >= 2
+        self._caret_bar.setVisible(show)
+        if show:
+            self._caret_bar.raise_()
+
+    def _wake_caret(self) -> None:
+        self._caret_on = True
+        flash = QApplication.cursorFlashTime()
+        self._caret_timer.setInterval(max(280, flash // 2))
+        if self.isVisible():
+            self._caret_timer.start()
+        self._sync_caret()
+
+    def _toggle_caret(self) -> None:
+        self._caret_on = not self._caret_on
+        self._sync_caret()
 
 
 def _screen_key(screen) -> tuple[int, int, int, int]:

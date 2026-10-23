@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import QPoint, QRectF, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QCursor, QFont, QGuiApplication, QPainter, QPen
-from PyQt6.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QAbstractButton, QApplication, QFileDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from presenter.capture import screen_recording_allowed
 from presenter.cocoa import (
@@ -59,6 +59,60 @@ def _screen_label(screen) -> str:
     if not name:
         return "Pantalla"
     return name if len(name) <= 18 else name[:17] + "…"
+
+
+class _ListChip(QAbstractButton):
+    """A saved-list name with a circled red X before the title."""
+
+    dropRequested = pyqtSignal()
+    _BADGE = 22.0
+
+    def __init__(self, label: str) -> None:
+        super().__init__()
+        self._label = label
+        self.setCheckable(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFont(ui_font(12, QFont.Weight.Medium))
+        self.setFixedHeight(32)
+        text_width = self.fontMetrics().horizontalAdvance(label)
+        self.setFixedWidth(max(text_width + 52, 84))
+
+    def _badge_rect(self) -> QRectF:
+        inset = (self.height() - self._BADGE) / 2
+        return QRectF(inset, inset, self._BADGE, self._BADGE)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton and event.position().x() <= self._badge_rect().right() + 4:
+            self.dropRequested.emit()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def paintEvent(self, _event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        if self.isChecked():
+            painter.setBrush(QColor(231, 177, 90, 42))
+        elif self.underMouse():
+            painter.setBrush(QColor(255, 255, 255, 20))
+        else:
+            painter.setBrush(QColor(255, 255, 255, 12))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(rect, 10, 10)
+        badge = self._badge_rect()
+        painter.setBrush(QColor(255, 255, 255, 16))
+        painter.setPen(QPen(QColor(247, 244, 236, 190), 1.25))
+        painter.drawEllipse(badge)
+        mark = badge.adjusted(7.5, 7.5, -7.5, -7.5)
+        painter.setPen(QPen(QColor(255, 86, 86), 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawLine(mark.topLeft(), mark.bottomRight())
+        painter.drawLine(mark.bottomLeft(), mark.topRight())
+        painter.setPen(ACCENT if self.isChecked() else QColor(247, 244, 236, 225))
+        painter.setFont(self.font())
+        text = QRectF(badge.right() + 8, 0, self.width() - badge.right() - 16, self.height())
+        painter.drawText(text, int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), self._label)
+        painter.end()
 
 
 class _RowIcon(QWidget):
@@ -269,7 +323,7 @@ class Dock(_Glass):
         self._roster_error = ""
         self._list_title = ""
         self._saved_signature: tuple[str, ...] = ()
-        self._saved_buttons: dict[str, TextButton] = {}
+        self._saved_buttons: dict[str, _ListChip] = {}
         self._rosters = rosters or RosterStore()
         self._flags_before_dialog = None
         self._spinning = False
@@ -429,10 +483,7 @@ class Dock(_Glass):
         self._saved_row.setContentsMargins(0, 0, 0, 0)
         self._saved_row.setSpacing(6)
         self._saved_row.addStretch(1)
-        self.roster_drop = IconButton("trash")
-        self._saved_row.addWidget(self.roster_drop)
         self._saved_row.addStretch(1)
-        self.roster_drop.hide()
         self.roster_lists.hide()
         roster_root.addWidget(self.roster_lists)
         name_row = QHBoxLayout()
@@ -473,7 +524,6 @@ class Dock(_Glass):
         self.roster_load.clicked.connect(self._load_roster)
         self.roster_pick.clicked.connect(self._pick_student)
         self.roster_remove.clicked.connect(self._remove_picked)
-        self.roster_drop.clicked.connect(self._drop_saved)
         self.help.clicked.connect(lambda _=False: self.action.emit("help"))
         self.hide_btn.clicked.connect(lambda _=False: self.action.emit("hide"))
         self.quit_btn.clicked.connect(lambda _=False: self.action.emit("quit"))
@@ -625,14 +675,13 @@ class Dock(_Glass):
                 button.deleteLater()
             self._saved_buttons.clear()
             for title in titles:
-                button = TextButton(self._list_label(title))
-                button.setCheckable(True)
+                button = _ListChip(self._list_label(title))
                 button.clicked.connect(lambda _=False, name=title: self._select_saved(name))
-                self._saved_row.insertWidget(self._saved_row.count() - 2, button)
+                button.dropRequested.connect(lambda name=title: self._drop_saved(name))
+                self._saved_row.insertWidget(self._saved_row.count() - 1, button)
                 self._saved_buttons[title] = button
         for title, button in self._saved_buttons.items():
             self._set_checked(button, title == self._rosters.active)
-        self.roster_drop.setVisible(bool(self._rosters.active))
         self.roster_lists.setVisible(bool(titles))
 
     def _select_saved(self, title: str) -> None:
@@ -644,11 +693,15 @@ class Dock(_Glass):
             self._roster_error = "No quedan nombres"
             self._relayout()
 
-    def _drop_saved(self) -> None:
-        title = self._rosters.active or self._list_title
+    def _drop_saved(self, title: str = "") -> None:
+        title = title or self._rosters.active or self._list_title
         if not title:
             return
+        was_active = title == (self._rosters.active or self._list_title)
         nxt = self._rosters.forget(title)
+        if not was_active:
+            self._relayout()
+            return
         self._list_title = nxt
         self._roster_open = True
         if nxt:
@@ -748,8 +801,6 @@ class Dock(_Glass):
         if not self._names:
             self._pool = []
             self._roster_error = "No quedan nombres"
-        if self._list_title:
-            self._rosters.remember(self._list_title, self._names)
         self._relayout()
 
     def _cancel_spin(self) -> None:

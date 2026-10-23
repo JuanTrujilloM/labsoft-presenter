@@ -56,8 +56,10 @@ La tinta y los marcos permanecen al salir de una herramienta. **Borrar** los qui
 
 El dado, en la barra, abre la fila del listado.
 
-**Cargar lista** lee un archivo de texto con un nombre por renglón. Las líneas vacías se ignoran.
+**Cargar lista** lee un archivo de texto con un nombre por renglón. Las líneas vacías se ignoran. La lista queda guardada con el nombre del archivo.
+
+Al abrir Presenter de nuevo, el dado muestra esas listas. Pulsa una para usarla. La papelera de esa fila quita la lista guardada.
 
 **Elegir** hace pasar varios nombres, frena y deja el elegido en dorado. No repite un nombre hasta que hayan salido todos.
 
-La papelera junto al nombre lo quita de la lista. Esa persona no vuelve a salir en los siguientes sorteos.
+La papelera junto al nombre lo quita de la lista guardada. Esa persona no vuelve a salir.

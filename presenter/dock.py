@@ -19,6 +19,7 @@ from presenter.cocoa import (
 )
 from presenter.icons import paint_icon
 from presenter.model import UiState
+from presenter.rosters import RosterStore
 from presenter.theme import ACCENT, DOCK_PAD, DOCK_RADIUS, DOCK_SHADOW, GLASS, IVORY, PALETTE, format_mag, ui_font
 from presenter.widgets import ColorDot, Hairline, IconButton, TextButton, ThinSlider
 
@@ -153,7 +154,7 @@ class Guide(_Glass):
             ("zoom", "Zoom", "⌃⌥Z", "Amplía la pantalla"),
             ("draw", "Dibujar", "⌃⌥D", "Trazo y formas"),
             ("text", "Escribir", "⌃⌥T", "Texto en la diapositiva"),
-            ("random", "Azar", "dado", "Sortea un nombre"),
+            ("random", "Azar", "dado", "Sortea una lista guardada"),
             ("hide", "Herramientas", "⌃⌥P", "Muestra u oculta"),
             ("back", "Volver", "Esc", "Un paso atrás"),
             ("undo", "Deshacer", "⌘Z", "Quita lo último"),
@@ -255,7 +256,7 @@ class Dock(_Glass):
 
     level_offset = 3
 
-    def __init__(self) -> None:
+    def __init__(self, rosters: RosterStore | None = None) -> None:
         super().__init__()
         self._state: UiState | None = None
         self._collapsed = False
@@ -266,6 +267,10 @@ class Dock(_Glass):
         self._pool: list[str] = []
         self._picked = ""
         self._roster_error = ""
+        self._list_title = ""
+        self._saved_signature: tuple[str, ...] = ()
+        self._saved_buttons: dict[str, TextButton] = {}
+        self._rosters = rosters or RosterStore()
         self._flags_before_dialog = None
         self._spinning = False
         self._spin_frames: list[str] = []
@@ -273,6 +278,10 @@ class Dock(_Glass):
         self._spin_timer = QTimer(self)
         self._spin_timer.setSingleShot(True)
         self._spin_timer.timeout.connect(self._spin_tick)
+        if self._rosters.active:
+            self._list_title = self._rosters.active
+            self._names = self._rosters.active_names()
+            self._pool = list(self._names)
 
         self.mark = Mark()
         self.laser = IconButton("laser", checkable=True)
@@ -415,6 +424,17 @@ class Dock(_Glass):
         self.roster_name.setMinimumHeight(52)
         self.roster_name.setStyleSheet("color: #E7B15A; background: transparent;")
         roster_root.addLayout(roster_row)
+        self.roster_lists = _transparent(QWidget())
+        self._saved_row = QHBoxLayout(self.roster_lists)
+        self._saved_row.setContentsMargins(0, 0, 0, 0)
+        self._saved_row.setSpacing(6)
+        self._saved_row.addStretch(1)
+        self.roster_drop = IconButton("trash")
+        self._saved_row.addWidget(self.roster_drop)
+        self._saved_row.addStretch(1)
+        self.roster_drop.hide()
+        self.roster_lists.hide()
+        roster_root.addWidget(self.roster_lists)
         name_row = QHBoxLayout()
         name_row.setContentsMargins(0, 0, 0, 0)
         name_row.setSpacing(8)
@@ -453,6 +473,7 @@ class Dock(_Glass):
         self.roster_load.clicked.connect(self._load_roster)
         self.roster_pick.clicked.connect(self._pick_student)
         self.roster_remove.clicked.connect(self._remove_picked)
+        self.roster_drop.clicked.connect(self._drop_saved)
         self.help.clicked.connect(lambda _=False: self.action.emit("help"))
         self.hide_btn.clicked.connect(lambda _=False: self.action.emit("hide"))
         self.quit_btn.clicked.connect(lambda _=False: self.action.emit("quit"))
@@ -589,6 +610,60 @@ class Dock(_Glass):
         if anchor is not None and self.size() != before:
             self._move_to_anchor(anchor)
 
+    @staticmethod
+    def _list_label(title: str) -> str:
+        title = title.strip() or "Lista"
+        return title if len(title) <= 18 else title[:17] + "…"
+
+    def _refresh_saved_lists(self) -> None:
+        titles = tuple(self._rosters.titles())
+        if titles != self._saved_signature:
+            self._saved_signature = titles
+            for button in self._saved_buttons.values():
+                self._saved_row.removeWidget(button)
+                button.setParent(None)
+                button.deleteLater()
+            self._saved_buttons.clear()
+            for title in titles:
+                button = TextButton(self._list_label(title))
+                button.setCheckable(True)
+                button.clicked.connect(lambda _=False, name=title: self._select_saved(name))
+                self._saved_row.insertWidget(self._saved_row.count() - 2, button)
+                self._saved_buttons[title] = button
+        for title, button in self._saved_buttons.items():
+            self._set_checked(button, title == self._rosters.active)
+        self.roster_drop.setVisible(bool(self._rosters.active))
+        self.roster_lists.setVisible(bool(titles))
+
+    def _select_saved(self, title: str) -> None:
+        names = self._rosters.select(title)
+        self._list_title = title
+        self._roster_open = True
+        self.load_names(names)
+        if not names:
+            self._roster_error = "No quedan nombres"
+            self._relayout()
+
+    def _drop_saved(self) -> None:
+        title = self._rosters.active or self._list_title
+        if not title:
+            return
+        nxt = self._rosters.forget(title)
+        self._list_title = nxt
+        self._roster_open = True
+        if nxt:
+            self.load_names(self._rosters.names_for(nxt))
+            if not self._names:
+                self._roster_error = "No quedan nombres"
+                self._relayout()
+            return
+        self._cancel_spin()
+        self._names = []
+        self._pool = []
+        self._picked = ""
+        self._roster_error = ""
+        self._relayout()
+
     def _toggle_roster(self, _checked: bool = False) -> None:
         self._roster_open = not self._roster_open
         self._relayout()
@@ -623,7 +698,12 @@ class Dock(_Glass):
             self._roster_error = "No se pudo leer el archivo"
             self._relayout()
             return
-        self.load_names(names_from_text(text))
+        names = names_from_text(text)
+        if names:
+            title = Path(path).stem.strip() or "Lista"
+            self._list_title = title
+            self._rosters.remember(title, names)
+        self.load_names(names)
 
     def _pick_student(self) -> None:
         if not self._names or self._spinning:
@@ -668,6 +748,8 @@ class Dock(_Glass):
         if not self._names:
             self._pool = []
             self._roster_error = "No quedan nombres"
+        if self._list_title:
+            self._rosters.remember(self._list_title, self._names)
         self._relayout()
 
     def _cancel_spin(self) -> None:
@@ -687,6 +769,7 @@ class Dock(_Glass):
         else:
             self.roster_status.setText(self._roster_error)
         self.roster_status.setVisible(bool(self.roster_status.text()))
+        self._refresh_saved_lists()
         shown = ""
         settled = False
         if self._spinning and self._spin_frames:

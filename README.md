@@ -54,7 +54,9 @@ La tinta y los marcos permanecen al salir de una herramienta. **Borrar** los qui
 
 ## Elegir al azar
 
-El icono de laboratorio, en la barra, muestra las pruebas. Por ahora aparece el dado, que abre la fila del listado.
+El icono de laboratorio, en la barra, muestra las pruebas. Ahí están el dado y el tiempo.
+
+El dado abre la fila del listado.
 
 **Cargar lista** lee un archivo de texto con un nombre por renglón. Las líneas vacías se ignoran. La lista queda guardada con el nombre del archivo.
 
@@ -63,3 +65,5 @@ Al abrir Presenter de nuevo, el dado muestra esas listas. Pulsa una para usarla.
 **Elegir** hace pasar varios nombres, frena y deja el elegido en dorado. No repite un nombre hasta que hayan salido todos.
 
 La papelera junto al nombre lo quita solo en esta sesión. El archivo guardado no cambia.
+
+**Tiempo** pide primero la pantalla, luego los minutos y los segundos. La cuenta atrás queda en esa pantalla. Pulsa el icono otra vez para quitarla.

@@ -172,6 +172,12 @@ def _draw(painter: QPainter, name: str, color: QColor) -> None:
         painter.drawEllipse(QPointF(-1.35, 0.15), 0.95, 0.95)
         painter.drawEllipse(QPointF(1.7, -1.05), 0.7, 0.7)
         return
+    if name == "timer":
+        painter.drawArc(QRectF(-1.7, -7.4, 3.4, 3.4), 20 * 16, 140 * 16)
+        painter.drawEllipse(QPointF(0, 1.1), 6.2, 6.2)
+        painter.drawLine(QPointF(0, 1.1), QPointF(0, -2.4))
+        painter.drawLine(QPointF(0, 1.1), QPointF(2.8, 2.7))
+        return
     if name == "random":
         painter.drawRoundedRect(QRectF(-6.4, -6.4, 12.8, 12.8), 2.6, 2.6)
         painter.setPen(Qt.PenStyle.NoPen)

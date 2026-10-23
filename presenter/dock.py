@@ -7,9 +7,19 @@ from pathlib import Path
 
 from PyQt6.QtCore import QPoint, QRectF, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QCursor, QFont, QGuiApplication, QPainter, QPen
-from PyQt6.QtWidgets import QAbstractButton, QApplication, QFileDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QAbstractButton,
+    QApplication,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from presenter.capture import screen_recording_allowed
+from presenter.countdown import Countdown
 from presenter.cocoa import (
     FloatingWindow,
     accessibility_trusted,
@@ -59,6 +69,33 @@ def _screen_label(screen) -> str:
     if not name:
         return "Pantalla"
     return name if len(name) <= 18 else name[:17] + "…"
+
+
+class _TimeBox(QLineEdit):
+    """Two digits for the countdown setup."""
+
+    def __init__(self, text: str) -> None:
+        super().__init__(text)
+        self.setFont(ui_font(16, QFont.Weight.Medium))
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setFixedSize(58, 34)
+        self.setMaxLength(2)
+        self.setAttribute(Qt.WidgetAttribute.WA_MacShowFocusRect, False)
+        self.setStyleSheet(
+            "QLineEdit {"
+            "background-color: #1c1c1f;"
+            "color: #F7F4EC;"
+            "border: 1px solid rgba(255,255,255,0.16);"
+            "border-radius: 10px;"
+            "selection-background-color: rgba(231, 177, 90, 0.35);"
+            "}"
+        )
+
+    def value(self, limit: int) -> int:
+        digits = "".join(ch for ch in self.text() if ch.isdigit())
+        if not digits:
+            return 0
+        return min(limit, int(digits))
 
 
 class _ListChip(QAbstractButton):
@@ -210,6 +247,7 @@ class Guide(_Glass):
             ("text", "Escribir", "⌃⌥T", "Texto en la diapositiva"),
             ("lab", "Lab", "prueba", "Muestra las pruebas"),
             ("random", "Azar", "dado", "Sortea una lista guardada"),
+            ("timer", "Tiempo", "prueba", "Cuenta atrás en pantalla"),
             ("hide", "Herramientas", "⌃⌥P", "Muestra u oculta"),
             ("back", "Volver", "Esc", "Un paso atrás"),
             ("undo", "Deshacer", "⌘Z", "Quita lo último"),
@@ -347,7 +385,11 @@ class Dock(_Glass):
         self.text = IconButton("text", checkable=True)
         self.lab_btn = IconButton("lab", checkable=True)
         self.random_btn = IconButton("random", checkable=True)
-        self._experiment_buttons = (self.random_btn,)
+        self.timer_btn = IconButton("timer", checkable=True)
+        self._experiment_buttons = (self.random_btn, self.timer_btn)
+        self._timer_stage = ""
+        self._timer_screen_index = -1
+        self.countdown = Countdown()
         self.help = IconButton("help")
         self.hide_btn = IconButton("hide")
         self.quit_btn = TextButton("Salir")
@@ -419,6 +461,7 @@ class Dock(_Glass):
         tools.addSpacing(6)
         tools.addWidget(self.lab_btn)
         tools.addWidget(self.random_btn)
+        tools.addWidget(self.timer_btn)
         tools.addSpacing(6)
         tools.addWidget(self.help)
         tools.addWidget(self.hide_btn)
@@ -505,12 +548,57 @@ class Dock(_Glass):
         self.roster_remove.hide()
         self.roster.hide()
 
+        self.timer_panel = _transparent(QWidget())
+        timer_root = QVBoxLayout(self.timer_panel)
+        timer_root.setContentsMargins(0, 0, 0, 0)
+        timer_root.setSpacing(6)
+        self.timer_screens = _transparent(QWidget())
+        screen_col = QVBoxLayout(self.timer_screens)
+        screen_col.setContentsMargins(0, 0, 0, 0)
+        screen_col.setSpacing(6)
+        screen_prompt = QLabel("Elige la pantalla")
+        screen_prompt.setFont(ui_font(12))
+        screen_prompt.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        screen_prompt.setStyleSheet("color: rgba(247,244,236,0.62); background: transparent;")
+        screen_col.addWidget(screen_prompt)
+        self._timer_screen_row = QHBoxLayout()
+        self._timer_screen_row.setContentsMargins(0, 0, 0, 0)
+        self._timer_screen_row.setSpacing(6)
+        screen_col.addLayout(self._timer_screen_row)
+        self.timer_time = _transparent(QWidget())
+        time_row = QHBoxLayout(self.timer_time)
+        time_row.setContentsMargins(0, 0, 0, 0)
+        time_row.setSpacing(6)
+        self.timer_minutes = _TimeBox("05")
+        self.timer_seconds = _TimeBox("00")
+        minute_label = QLabel("min")
+        second_label = QLabel("s")
+        for label in (minute_label, second_label):
+            label.setFont(ui_font(12))
+            label.setStyleSheet("color: rgba(247,244,236,0.62); background: transparent;")
+        self.timer_start = TextButton("Iniciar", gold=True)
+        self.timer_error = QLabel("")
+        self.timer_error.setFont(ui_font(12))
+        self.timer_error.setStyleSheet("color: #FF5C56; background: transparent;")
+        time_row.addStretch(1)
+        time_row.addWidget(self.timer_minutes)
+        time_row.addWidget(minute_label)
+        time_row.addWidget(self.timer_seconds)
+        time_row.addWidget(second_label)
+        time_row.addWidget(self.timer_start)
+        time_row.addStretch(1)
+        timer_root.addWidget(self.timer_screens)
+        timer_root.addWidget(self.timer_time)
+        timer_root.addWidget(self.timer_error)
+        self.timer_panel.hide()
+
         root = QVBoxLayout(self)
         left, top, right, bottom = DOCK_SHADOW
         root.setContentsMargins(left + DOCK_PAD, top + DOCK_PAD, right + DOCK_PAD, bottom + DOCK_PAD)
         root.setSpacing(6)
         root.addWidget(self.tools)
         root.addWidget(self.roster)
+        root.addWidget(self.timer_panel)
         root.addWidget(self.context)
         root.addWidget(self.hint)
         root.addWidget(self.pill)
@@ -528,6 +616,10 @@ class Dock(_Glass):
         self.text.clicked.connect(lambda _=False: self.action.emit("text"))
         self.lab_btn.clicked.connect(self._toggle_experiments)
         self.random_btn.clicked.connect(self._toggle_roster)
+        self.timer_btn.clicked.connect(self._toggle_timer)
+        self.timer_start.clicked.connect(self._start_timer)
+        self.timer_minutes.returnPressed.connect(self.timer_seconds.setFocus)
+        self.timer_seconds.returnPressed.connect(self._start_timer)
         self.roster_load.clicked.connect(self._load_roster)
         self.roster_pick.clicked.connect(self._pick_student)
         self.roster_remove.clicked.connect(self._remove_picked)
@@ -729,6 +821,7 @@ class Dock(_Glass):
         if not self._experiments_open:
             self._roster_open = False
             self._cancel_spin()
+            self._stop_timer()
         self._relayout()
 
     def _sync_experiments(self) -> None:
@@ -736,6 +829,73 @@ class Dock(_Glass):
         visible = self._experiments_open and not self._collapsed
         for button in self._experiment_buttons:
             button.setVisible(visible)
+        setup = visible and self._timer_stage in ("screen", "time")
+        self.timer_panel.setVisible(setup)
+        self.timer_screens.setVisible(self._timer_stage == "screen")
+        self.timer_time.setVisible(self._timer_stage == "time")
+        self.timer_error.setVisible(bool(self.timer_error.text()) and self._timer_stage == "time")
+        self._set_checked(self.timer_btn, bool(self._timer_stage))
+
+    def _toggle_timer(self, _checked: bool = False) -> None:
+        if self._timer_stage:
+            self._stop_timer()
+        else:
+            self._timer_stage = "screen"
+            self.timer_error.setText("")
+            self._build_timer_screens()
+        self._relayout()
+
+    def _stop_timer(self) -> None:
+        self._timer_stage = ""
+        self.countdown.stop()
+
+    def _build_timer_screens(self) -> None:
+        while self._timer_screen_row.count():
+            item = self._timer_screen_row.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+        self._timer_screen_row.addStretch(1)
+        for index, screen in enumerate(QGuiApplication.screens()):
+            button = TextButton(_screen_label(screen))
+            button.clicked.connect(lambda _=False, i=index: self._choose_timer_screen(i))
+            self._timer_screen_row.addWidget(button)
+        self._timer_screen_row.addStretch(1)
+
+    def _choose_timer_screen(self, index: int) -> None:
+        screens = QGuiApplication.screens()
+        if not 0 <= index < len(screens):
+            return
+        self._timer_screen_index = index
+        self._timer_stage = "time"
+        self.timer_error.setText("")
+        self._relayout()
+        self.timer_minutes.setFocus()
+        self.timer_minutes.selectAll()
+
+    def _start_timer(self) -> None:
+        if self._timer_stage != "time":
+            return
+        minutes = self.timer_minutes.value(99)
+        seconds = self.timer_seconds.value(59)
+        total = minutes * 60 + seconds
+        if total <= 0:
+            self.timer_error.setText("Indica un tiempo")
+            self._relayout()
+            return
+        screens = QGuiApplication.screens()
+        if not 0 <= self._timer_screen_index < len(screens):
+            self._timer_stage = "screen"
+            self._build_timer_screens()
+            self._relayout()
+            return
+        self.timer_minutes.setText(f"{minutes:02d}")
+        self.timer_seconds.setText(f"{seconds:02d}")
+        self.timer_error.setText("")
+        self._timer_stage = "run"
+        self.countdown.start(screens[self._timer_screen_index], total)
+        self._relayout()
 
     def _toggle_roster(self, _checked: bool = False) -> None:
         self._roster_open = not self._roster_open

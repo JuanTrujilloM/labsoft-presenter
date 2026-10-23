@@ -54,7 +54,7 @@ La tinta y los marcos permanecen al salir de una herramienta. **Borrar** los qui
 
 ## Elegir al azar
 
-El dado, en la barra, abre la fila del listado.
+El icono de laboratorio, en la barra, muestra las pruebas. Por ahora aparece el dado, que abre la fila del listado.
 
 **Cargar lista** lee un archivo de texto con un nombre por renglón. Las líneas vacías se ignoran. La lista queda guardada con el nombre del archivo.
 

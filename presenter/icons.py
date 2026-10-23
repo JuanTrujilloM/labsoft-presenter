@@ -157,6 +157,21 @@ def _draw(painter: QPainter, name: str, color: QColor) -> None:
         painter.drawLine(QPointF(-5.5, -2.0), QPointF(0, 3.4))
         painter.drawLine(QPointF(0, 3.4), QPointF(5.5, -2.0))
         return
+    if name == "lab":
+        flask = QPainterPath()
+        flask.moveTo(-1.55, -7.1)
+        flask.lineTo(1.55, -7.1)
+        flask.lineTo(1.55, -3.5)
+        flask.lineTo(6.3, 6.5)
+        flask.lineTo(-6.3, 6.5)
+        flask.lineTo(-1.55, -3.5)
+        flask.closeSubpath()
+        painter.drawPath(flask)
+        painter.drawLine(QPointF(-2.3, -7.1), QPointF(2.3, -7.1))
+        painter.drawLine(QPointF(-4.35, 2.6), QPointF(4.35, 2.6))
+        painter.drawEllipse(QPointF(-1.35, 0.15), 0.95, 0.95)
+        painter.drawEllipse(QPointF(1.7, -1.05), 0.7, 0.7)
+        return
     if name == "random":
         painter.drawRoundedRect(QRectF(-6.4, -6.4, 12.8, 12.8), 2.6, 2.6)
         painter.setPen(Qt.PenStyle.NoPen)

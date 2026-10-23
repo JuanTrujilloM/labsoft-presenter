@@ -208,6 +208,7 @@ class Guide(_Glass):
             ("zoom", "Zoom", "⌃⌥Z", "Amplía la pantalla"),
             ("draw", "Dibujar", "⌃⌥D", "Trazo y formas"),
             ("text", "Escribir", "⌃⌥T", "Texto en la diapositiva"),
+            ("lab", "Lab", "prueba", "Muestra las pruebas"),
             ("random", "Azar", "dado", "Sortea una lista guardada"),
             ("hide", "Herramientas", "⌃⌥P", "Muestra u oculta"),
             ("back", "Volver", "Esc", "Un paso atrás"),
@@ -317,6 +318,7 @@ class Dock(_Glass):
         self._ready = False
         self._zoom_screens: tuple = ()
         self._roster_open = False
+        self._experiments_open = False
         self._names: list[str] = []
         self._pool: list[str] = []
         self._picked = ""
@@ -343,7 +345,9 @@ class Dock(_Glass):
         self.zoom = IconButton("zoom", checkable=True)
         self.draw = IconButton("draw", checkable=True)
         self.text = IconButton("text", checkable=True)
+        self.lab_btn = IconButton("lab", checkable=True)
         self.random_btn = IconButton("random", checkable=True)
+        self._experiment_buttons = (self.random_btn,)
         self.help = IconButton("help")
         self.hide_btn = IconButton("hide")
         self.quit_btn = TextButton("Salir")
@@ -413,6 +417,7 @@ class Dock(_Glass):
         tools.addWidget(self.draw)
         tools.addWidget(self.text)
         tools.addSpacing(6)
+        tools.addWidget(self.lab_btn)
         tools.addWidget(self.random_btn)
         tools.addSpacing(6)
         tools.addWidget(self.help)
@@ -511,6 +516,7 @@ class Dock(_Glass):
         root.addWidget(self.pill)
         self.pill.hide()
         self.context.hide()
+        self._sync_experiments()
 
         self._wire()
 
@@ -520,6 +526,7 @@ class Dock(_Glass):
         self.zoom.clicked.connect(lambda _=False: self.action.emit("zoom"))
         self.draw.clicked.connect(lambda _=False: self.action.emit("draw"))
         self.text.clicked.connect(lambda _=False: self.action.emit("text"))
+        self.lab_btn.clicked.connect(self._toggle_experiments)
         self.random_btn.clicked.connect(self._toggle_roster)
         self.roster_load.clicked.connect(self._load_roster)
         self.roster_pick.clicked.connect(self._pick_student)
@@ -717,6 +724,19 @@ class Dock(_Glass):
         self._roster_error = ""
         self._relayout()
 
+    def _toggle_experiments(self, _checked: bool = False) -> None:
+        self._experiments_open = not self._experiments_open
+        if not self._experiments_open:
+            self._roster_open = False
+            self._cancel_spin()
+        self._relayout()
+
+    def _sync_experiments(self) -> None:
+        self._set_checked(self.lab_btn, self._experiments_open)
+        visible = self._experiments_open and not self._collapsed
+        for button in self._experiment_buttons:
+            button.setVisible(visible)
+
     def _toggle_roster(self, _checked: bool = False) -> None:
         self._roster_open = not self._roster_open
         self._relayout()
@@ -810,7 +830,8 @@ class Dock(_Glass):
         self._spin_index = 0
 
     def _sync_roster(self) -> None:
-        self.roster.setVisible(self._roster_open and not self._collapsed)
+        self._sync_experiments()
+        self.roster.setVisible(self._roster_open and self._experiments_open and not self._collapsed)
         self._set_checked(self.random_btn, self._roster_open)
         self.roster_pick.setVisible(bool(self._names))
         self.roster_pick.setEnabled(bool(self._names) and not self._spinning)

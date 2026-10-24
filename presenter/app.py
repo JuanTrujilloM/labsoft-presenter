@@ -33,6 +33,8 @@ class Presenter(QObject):
         self.lens = Lens()
         self.dock = Dock()
         self.guide = Guide()
+        self.dock.keep_above(self.overlay)
+        self.guide.keep_above(self.dock)
         self.hotkeys = Hotkeys()
         self._last = None
         self._esc_lock = False

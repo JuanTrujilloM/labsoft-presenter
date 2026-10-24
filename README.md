@@ -48,6 +48,8 @@ Si aparece un aviso, permítelo, cierra Presenter y ábrelo de nuevo.
 | Salir de la herramienta | Esc |
 | Deshacer | ⌘Z |
 
+En Windows y Linux, ⌃ es Ctrl, ⌥ es Alt y Deshacer es Ctrl+Z.
+
 Al resaltar, pulsa **Marco** y arrastra alrededor de un elemento. Mantén ⌥ y arrastra para enmarcar sin salir de la diapositiva. Desplázate, o usa + y −, para cambiar el foco de luz o el zoom. Con varias pantallas, Zoom pide primero cuál ampliar y sigue al puntero solo en esa pantalla. Con el zoom activo, un doble clic pasa al lápiz y otro doble clic vuelve a mover.
 
 La tinta y los marcos permanecen al salir de una herramienta. **Borrar** los quita. **Listo** o Esc da un paso atrás.

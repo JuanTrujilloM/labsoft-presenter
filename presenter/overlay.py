@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 from PyQt6.QtCore import (
     QEasingCurve,
     QPoint,
@@ -30,6 +32,9 @@ from presenter.model import Document, Frame, Note, Stroke, UiState, dist
 from presenter.theme import ACCENT, PALETTE
 
 _DRAW_SHAPES = ("pen", "marker", "line", "arrow", "rect", "ellipse", "eraser")
+# Windows sends clicks on fully transparent pixels to the window below, so a
+# stage that takes the pen keeps an invisible film to receive them.
+_HIT_FILL = QColor(0, 0, 0, 1) if sys.platform == "win32" else QColor(Qt.GlobalColor.transparent)
 _HINTS = {
     "idle": "Resalta, amplía y escribe sobre la diapositiva",
     "laser": "La luz es el puntero",
@@ -520,7 +525,7 @@ class Overlay(FloatingWindow):
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-        painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
+        painter.fillRect(self.rect(), _HIT_FILL if self.captures_mouse() else Qt.GlobalColor.transparent)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
 
         if self.mode == "zoom" and self.shot is not None and not self.shot.isNull():

@@ -169,10 +169,31 @@ class FloatingWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self._click_through = False
+        self._owner: QWidget | None = None
+
+    def keep_above(self, owner: QWidget) -> None:
+        """Stay above owner on Windows, as window levels do on macOS.
+
+        Windows brings a clicked or activated window to the front, but always
+        keeps an owned window above its owner.
+        """
+        if sys.platform != "win32":
+            return
+        self._owner = owner
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
+        self._attach_owner()
         QTimer.singleShot(0, self.apply_native)
+
+    def _attach_owner(self) -> None:
+        if self._owner is None:
+            return
+        self._owner.winId()
+        handle = self.windowHandle()
+        owner = self._owner.windowHandle()
+        if handle is not None and owner is not None and handle.transientParent() is not owner:
+            handle.setTransientParent(owner)
 
     def apply_native(self) -> None:
         prepare_window(self, level_offset=self.level_offset, click_through=self._click_through)

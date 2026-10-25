@@ -169,6 +169,7 @@ class FloatingWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self._click_through = False
+        self._input_cut = False
         self._owner: QWidget | None = None
 
     def keep_above(self, owner: QWidget) -> None:
@@ -197,8 +198,28 @@ class FloatingWindow(QWidget):
 
     def apply_native(self) -> None:
         prepare_window(self, level_offset=self.level_offset, click_through=self._click_through)
+        self._sync_input()
 
     def set_click_through(self, enabled: bool) -> None:
         self._click_through = enabled
+        self._sync_input()
         if self.isVisible():
             self.apply_native()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        handle = self.windowHandle()
+        if self._input_cut and not self._click_through and handle is not None:
+            # Qt fixes the input shape to the size the window had when clicks came back.
+            handle.setFlag(Qt.WindowType.WindowTransparentForInput, True)
+            handle.setFlag(Qt.WindowType.WindowTransparentForInput, False)
+
+    def _sync_input(self) -> None:
+        """Let clicks fall through on X11, where even clear pixels take them."""
+        if sys.platform in ("darwin", "win32"):
+            return
+        handle = self.windowHandle()
+        flag = Qt.WindowType.WindowTransparentForInput
+        if handle is not None and bool(handle.flags() & flag) != self._click_through:
+            handle.setFlag(flag, self._click_through)
+            self._input_cut = True

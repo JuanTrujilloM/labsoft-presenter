@@ -184,8 +184,24 @@ class FloatingWindow(QWidget):
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
+        self._sync_input()
         self._attach_owner()
         QTimer.singleShot(0, self.apply_native)
+        if sys.platform not in ("darwin", "win32"):
+            QTimer.singleShot(250, self._reshape_frame)
+
+    def _reshape_frame(self) -> None:
+        """Have the window manager's frame take on the stage's input shape.
+
+        Openbox and xfwm4 wrap each mapped window in a frame of their own and
+        copy the input shape to it only when it changes after framing, so a
+        stage mapped click-through would still catch every click.
+        """
+        handle = self.windowHandle()
+        if not self.isVisible() or not self._click_through or handle is None:
+            return
+        handle.setFlag(Qt.WindowType.WindowTransparentForInput, False)
+        handle.setFlag(Qt.WindowType.WindowTransparentForInput, True)
 
     def _attach_owner(self) -> None:
         if self._owner is None:

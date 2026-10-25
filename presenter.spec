@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""Package Presenter as Presenter.app on macOS, Presenter.exe on Windows, and dist/Presenter/ on Linux."""
+"""Package Presenter as Presenter.app on macOS, Presenter.exe on Windows, and dist/Presenter on Linux."""
 
 import sys
 from pathlib import Path
@@ -63,7 +63,7 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
-onefile = sys.platform == "win32"
+onefile = sys.platform != "darwin"
 exe = EXE(
     pyz,
     a.scripts,

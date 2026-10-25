@@ -1,8 +1,8 @@
 # Presenter para macOS
 
-`Presenter-macOS-arm64.zip` es para Mac con Apple Silicon (M1 o posterior).
+`Presenter-macOS-arm64.dmg` es para Mac con Apple Silicon (M1 o posterior).
 
-1. Descomprime el zip y mueve `Presenter.app` a Aplicaciones.
+1. Abre el dmg y arrastra `Presenter.app` a la carpeta Aplicaciones.
 2. La app no está firmada por Apple. La primera vez, haz clic derecho en `Presenter.app` y elige **Abrir**. Si macOS dice que está dañada, ejecuta:
 
    ```bash

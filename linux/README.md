@@ -1,11 +1,15 @@
 # Presenter para Linux
 
-`Presenter-linux-x86_64.tar.gz` es para PCs de 64 bits (x86_64) con Ubuntu 22.04 o posterior, Debian 12, Fedora 36 o cualquier distribución con glibc 2.35 o más nueva.
+`Presenter-linux-x86_64` es para PCs de 64 bits (x86_64) con Ubuntu 22.04 o posterior, Debian 12, Fedora 36 o cualquier distribución con glibc 2.35 o más nueva.
+
+Es un solo archivo. Dale permiso de ejecución y ábrelo:
 
 ```bash
-tar -xzf Presenter-linux-x86_64.tar.gz
-./Presenter/Presenter
+chmod +x Presenter-linux-x86_64
+./Presenter-linux-x86_64
 ```
+
+También puedes marcar **Permitir ejecutar como programa** en las propiedades del archivo y abrirlo con doble clic. Cada vez que se abre, se descomprime en una carpeta temporal, así que tarda unos segundos en aparecer.
 
 Los atajos globales y el zoom necesitan una sesión X11. En Ubuntu, elige **Ubuntu en Xorg** en la pantalla de inicio de sesión. En Wayland la barra, el dibujo y el resto siguen funcionando.
 
